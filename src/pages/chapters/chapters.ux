@@ -1,0 +1,131 @@
+<template>
+  <div class="page" onswipe="ban">
+    <text class="title">章节选择</text>
+    <text class="sub">共 {{count}} 章 · 上下滑动 · 点按开始</text>
+
+    <list id="chap-list" class="lst" bounces="true" onswipe="ban">
+      <list-item class="item" for="{{rows}}" tid="cid" onclick="pick($idx)" onswipe="ban">
+        <div class="card">
+          <text class="no">{{$item.no}}</text>
+          <text class="nm">{{$item.name}}</text>
+          <text class="mk">{{$item.mark}}</text>
+        </div>
+      </list-item>
+    </list>
+
+    <div class="back" onclick="back" onswipe="ban"><text class="btn-t">返回</text></div>
+  </div>
+</template>
+
+<style>
+  .page { width: 336px; height: 480px; background-color: #14101a; position: relative; }
+  .title { position: absolute; top: 12px; left: 0px; width: 336px; text-align: center;
+           font-size: 24px; color: #ffd8e6; font-weight: bold; }
+  .sub { position: absolute; top: 44px; left: 0px; width: 336px; text-align: center;
+         font-size: 14px; color: #9c8f9b; }
+
+  /* 用 <list> 而不是 <scroll>：手环上 list 的惯性滚动更可靠，
+     条目也做得更大（86px 高 / 字号 24），一屏只放 4 条，避免误触 */
+  .lst { position: absolute; top: 68px; left: 0px; width: 336px; height: 358px; }
+
+  .item { width: 336px; height: 86px; }
+  .card { width: 312px; height: 74px; margin-left: 12px; margin-top: 6px; border-radius: 16px;
+          background-color: #241c2c; flex-direction: row; align-items: center;
+          padding-left: 14px; padding-right: 14px; }
+  .no { font-size: 17px; color: #cf9ec0; width: 38px; }
+  .nm { font-size: 24px; color: #ffe6ef; width: 226px; lines: 1; }
+  .mk { font-size: 16px; color: #7ee8e0; width: 18px; }
+
+  .back { position: absolute; top: 432px; left: 50px; width: 236px; height: 40px;
+          border-radius: 20px; background-color: #32243a;
+          align-items: center; justify-content: center; }
+  .btn-t { font-size: 19px; color: #ffffff; }
+</style>
+
+<script>
+import router from '@system.router'
+import file from '@system.file'
+import { loadAutoSave, loadCleared } from '../../common/reader.js'
+
+const SAVE_MAGIC = 'galgod-band-1'
+
+export default {
+  // 统一用 protected，不要用 data（两者不能共存，运行时会抛错）
+  protected: {
+    rows: [],
+    count: 0
+  },
+
+  onInit() {
+    this.starts = []
+    this.curChap = -1
+    this.cleared = false
+    // 先看有没有自动存档，好把「读到哪了」标出来并自动滚过去
+    loadAutoSave((d) => {
+      if (d && d.magic === SAVE_MAGIC && typeof d.chapter === 'number' && d.chapter >= 0) {
+        this.curChap = d.chapter
+      }
+      loadCleared((ok) => {
+        this.cleared = ok
+        this.loadIndex()
+      })
+    })
+  },
+
+  loadIndex() {
+    file.readText({
+      uri: '/common/story/index.txt',
+      success: (data) => {
+        let idx = null
+        try { idx = JSON.parse(data.text) } catch (e) { idx = null }
+        if (!idx || !idx.chapters) {
+          this.rows = [{ no: '!', name: '剧本索引损坏', mark: '' }]
+          return
+        }
+        const rows = []
+        this.starts = []
+        const list = idx.chapters
+        for (let i = 0; i < list.length; i++) {
+          const c = list[i]
+          // 结局章不露出（结局要玩出来，不能直接跳）；
+          // 后日谈是真结局的奖励，通关前也不出现
+          if (c.hide) continue
+          if (c.need && !this.cleared) continue
+          // mark 为空字符串时元素结构不变，避免在 list-item 里用 if
+          rows.push({
+            no: String(rows.length + 1),
+            name: c.title,
+            mark: i === this.curChap ? '▶' : ''
+          })
+          this.starts.push(c.start)
+        }
+        this.rows = rows
+        this.count = rows.length
+        if (this.curChap > 0) this.scrollToCurrent()
+      },
+      fail: () => { this.rows = [{ no: '!', name: '读取剧本索引失败', mark: '' }] }
+    })
+  },
+
+  scrollToCurrent() {
+    this.$nextTick(() => {
+      try {
+        const el = this.$element('chap-list')
+        if (el && typeof el.scrollTo === 'function') {
+          el.scrollTo({ index: this.curChap, behavior: 'instant' })
+        }
+      } catch (e) {}
+    })
+  },
+
+  ban() {},
+
+  pick(i) {
+    const at = this.starts[i]
+    if (at === undefined) return
+    router.replace({ uri: 'pages/game', params: { at: String(at) } })
+  },
+
+  back() { router.back() }
+}
+</script>

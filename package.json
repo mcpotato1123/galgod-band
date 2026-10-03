@@ -1,0 +1,27 @@
+{
+  "name": "galgod-band",
+  "private": true,
+  "version": "2.0.0",
+  "description": "GalGod —— 小米手环 9 Pro（Vela 快应用）galgame",
+  "scripts": {
+    "build": "node tools/build.js",
+    "release": "node tools/build.js release",
+    "start": "aiot start",
+    "test": "node tools/test_paginate.js",
+    "validate": "python tools/validate_story.py .",
+    "simulate": "python tools/simulate.py .",
+    "check": "npm run validate && npm run simulate && npm test",
+    "story": "python tools/gen_story.py",
+    "assets": "python tools/gen_assets.py",
+    "preview": "python tools/preview_ui.py",
+    "export": "python tools/export_repo.py ../galgod-band",
+    "verify": "python tools/check_encoding.py ."
+  },
+  "devDependencies": {
+    "aiot-toolkit": "2.0.5",
+    "@aiot-toolkit/jsc": "^1.0.9"
+  },
+  "browserslist": [
+    "chrome 65"
+  ]
+}

@@ -1,0 +1,764 @@
+[
+ {
+  "kind": "bg",
+  "key": "box_seat",
+  "src": "images/bg/包厢.avif",
+  "out": "/common/img/b/box_seat.png"
+ },
+ {
+  "kind": "bg",
+  "key": "classroom1",
+  "src": "images/bg/教室_白天.avif",
+  "out": "/common/img/b/classroom1.png"
+ },
+ {
+  "kind": "bg",
+  "key": "classroom2",
+  "src": "images/bg/教室_傍晚.avif",
+  "out": "/common/img/b/classroom2.png"
+ },
+ {
+  "kind": "bg",
+  "key": "classroom3",
+  "src": "images/bg/教室_夜晚.avif",
+  "out": "/common/img/b/classroom3.png"
+ },
+ {
+  "kind": "bg",
+  "key": "classroom_floor",
+  "src": "images/bg/教室地板.webp",
+  "out": "/common/img/b/classroom_floor.png"
+ },
+ {
+  "kind": "bg",
+  "key": "computer_desk",
+  "src": "images/bg/电脑桌_晚上关灯.webp",
+  "out": "/common/img/b/computer_desk.png"
+ },
+ {
+  "kind": "bg",
+  "key": "elevator",
+  "src": "images/bg/电梯内.avif",
+  "out": "/common/img/b/elevator.png"
+ },
+ {
+  "kind": "bg",
+  "key": "heavenly_altar",
+  "src": "images/bg/天坛.webp",
+  "out": "/common/img/b/heavenly_altar.png"
+ },
+ {
+  "kind": "bg",
+  "key": "heavenly_altar_focus",
+  "src": "images/bg/天坛.webp",
+  "out": "/common/img/b/heavenly_altar_focus.png"
+ },
+ {
+  "kind": "bg",
+  "key": "hotel_corridor",
+  "src": "images/bg/高级酒店走廊_白天.webp",
+  "out": "/common/img/b/hotel_corridor.png"
+ },
+ {
+  "kind": "bg",
+  "key": "hotel_entrance",
+  "src": "images/bg/高级酒店_大门夜晚.webp",
+  "out": "/common/img/b/hotel_entrance.png"
+ },
+ {
+  "kind": "bg",
+  "key": "hotel_livingroom",
+  "src": "images/bg/高层客厅_白天.webp",
+  "out": "/common/img/b/hotel_livingroom.png"
+ },
+ {
+  "kind": "bg",
+  "key": "hotel_restaurant",
+  "src": "images/bg/高级酒店_早餐厅夜晚.webp",
+  "out": "/common/img/b/hotel_restaurant.png"
+ },
+ {
+  "kind": "bg",
+  "key": "kitchen",
+  "src": "images/bg/小厨房_晚上开灯.webp",
+  "out": "/common/img/b/kitchen.png"
+ },
+ {
+  "kind": "bg",
+  "key": "living_room1",
+  "src": "images/bg/小客厅_晚上关灯.webp",
+  "out": "/common/img/b/living_room1.png"
+ },
+ {
+  "kind": "bg",
+  "key": "living_room2",
+  "src": "images/bg/小客厅_晚上开灯.webp",
+  "out": "/common/img/b/living_room2.png"
+ },
+ {
+  "kind": "bg",
+  "key": "moon",
+  "src": "images/bg/moon.avif",
+  "out": "/common/img/b/moon.png"
+ },
+ {
+  "kind": "bg",
+  "key": "moon_all",
+  "src": "images/bg/moon.avif",
+  "out": "/common/img/b/moon_all.png"
+ },
+ {
+  "kind": "bg",
+  "key": "neighborhood",
+  "src": "images/bg/小区道路_夜晚.webp",
+  "out": "/common/img/b/neighborhood.png"
+ },
+ {
+  "kind": "bg",
+  "key": "neighborhood_vague",
+  "src": "images/bg/小区道路_夜晚_模糊.webp",
+  "out": "/common/img/b/neighborhood_vague.png"
+ },
+ {
+  "kind": "bg",
+  "key": "noctella_background",
+  "src": "images/cg/noctella_background.webp",
+  "out": "/common/img/b/noctella_background.png"
+ },
+ {
+  "kind": "bg",
+  "key": "pavilion",
+  "src": "images/bg/凉亭.avif",
+  "out": "/common/img/b/pavilion.png"
+ },
+ {
+  "kind": "bg",
+  "key": "riverside_road",
+  "src": "images/bg/河边白天.webp",
+  "out": "/common/img/b/riverside_road.png"
+ },
+ {
+  "kind": "bg",
+  "key": "riverside_road2",
+  "src": "images/bg/河边夕阳.webp",
+  "out": "/common/img/b/riverside_road2.png"
+ },
+ {
+  "kind": "bg",
+  "key": "room1_4",
+  "src": "images/bg/小卧室_夜晚开灯.avif",
+  "out": "/common/img/b/room1_4.png"
+ },
+ {
+  "kind": "bg",
+  "key": "school1",
+  "src": "images/bg/学校中庭1.webp",
+  "out": "/common/img/b/school1.png"
+ },
+ {
+  "kind": "bg",
+  "key": "school2",
+  "src": "images/bg/教学楼前.webp",
+  "out": "/common/img/b/school2.png"
+ },
+ {
+  "kind": "bg",
+  "key": "shopping_mall",
+  "src": "images/bg/商场.webp",
+  "out": "/common/img/b/shopping_mall.png"
+ },
+ {
+  "kind": "bg",
+  "key": "sportsroom",
+  "src": "images/bg/体育储藏室.webp",
+  "out": "/common/img/b/sportsroom.png"
+ },
+ {
+  "kind": "bg",
+  "key": "stair_landing",
+  "src": "images/bg/楼道.webp",
+  "out": "/common/img/b/stair_landing.png"
+ },
+ {
+  "kind": "bg",
+  "key": "street1_1",
+  "src": "images/bg/街道1_白天.avif",
+  "out": "/common/img/b/street1_1.png"
+ },
+ {
+  "kind": "bg",
+  "key": "street1_2",
+  "src": "images/bg/街道1_傍晚.avif",
+  "out": "/common/img/b/street1_2.png"
+ },
+ {
+  "kind": "bg",
+  "key": "street2_1",
+  "src": "images/bg/街道2_白天.avif",
+  "out": "/common/img/b/street2_1.png"
+ },
+ {
+  "kind": "bg",
+  "key": "street2_2",
+  "src": "images/bg/街道2_傍晚.avif",
+  "out": "/common/img/b/street2_2.png"
+ },
+ {
+  "kind": "bg",
+  "key": "street3_1",
+  "src": "images/bg/街道3_白天.avif",
+  "out": "/common/img/b/street3_1.png"
+ },
+ {
+  "kind": "bg",
+  "key": "tearoom",
+  "src": "images/bg/茶餐厅.webp",
+  "out": "/common/img/b/tearoom.png"
+ },
+ {
+  "kind": "bg",
+  "key": "test_paper",
+  "src": "images/bg/test_paper.webp",
+  "out": "/common/img/b/test_paper.png"
+ },
+ {
+  "kind": "bg",
+  "key": "urban_skies",
+  "src": "images/bg/都市天空.webp",
+  "out": "/common/img/b/urban_skies.png"
+ },
+ {
+  "kind": "sp",
+  "key": "father|shadow",
+  "src": "images/characters/other/男剪影.png",
+  "out": "/common/img/s/000.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|叹气",
+  "src": "images/characters/jiangwanqing/叹气.avif",
+  "out": "/common/img/s/001.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|坚定",
+  "src": "images/characters/jiangwanqing/坚定.avif",
+  "out": "/common/img/s/002.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|嫌弃",
+  "src": "images/characters/jiangwanqing/嫌弃.avif",
+  "out": "/common/img/s/003.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|尴尬",
+  "src": "images/characters/jiangwanqing/尴尬.avif",
+  "out": "/common/img/s/004.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|平静",
+  "src": "images/characters/jiangwanqing/平静.avif",
+  "out": "/common/img/s/005.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|微笑",
+  "src": "images/characters/jiangwanqing/微笑.avif",
+  "out": "/common/img/s/006.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|恐惧",
+  "src": "images/characters/jiangwanqing/恐惧.avif",
+  "out": "/common/img/s/007.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|指摘",
+  "src": "images/characters/jiangwanqing/指摘.avif",
+  "out": "/common/img/s/008.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|挺好颜",
+  "src": "images/characters/jiangwanqing/挺好颜.avif",
+  "out": "/common/img/s/009.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|游刃有余",
+  "src": "images/characters/jiangwanqing/游刃有余.avif",
+  "out": "/common/img/s/010.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|痛苦",
+  "src": "images/characters/jiangwanqing/痛苦.avif",
+  "out": "/common/img/s/011.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|眯眼",
+  "src": "images/characters/jiangwanqing/眯眼.avif",
+  "out": "/common/img/s/012.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|空洞",
+  "src": "images/characters/jiangwanqing/空洞落寞.avif",
+  "out": "/common/img/s/013.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|空洞2",
+  "src": "images/characters/jiangwanqing/空洞痛苦.avif",
+  "out": "/common/img/s/014.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|落寞",
+  "src": "images/characters/jiangwanqing/落寞.avif",
+  "out": "/common/img/s/015.png"
+ },
+ {
+  "kind": "sp",
+  "key": "jwq|计划通",
+  "src": "images/characters/jiangwanqing/计划通.avif",
+  "out": "/common/img/s/016.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|发情",
+  "src": "images/characters/linxi/发情.avif",
+  "out": "/common/img/s/017.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|叹气",
+  "src": "images/characters/linxi/叹气.avif",
+  "out": "/common/img/s/018.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|哭哭",
+  "src": "images/characters/linxi/哭哭.avif",
+  "out": "/common/img/s/019.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|害羞",
+  "src": "images/characters/linxi/害羞.avif",
+  "out": "/common/img/s/020.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|平静",
+  "src": "images/characters/linxi/平静.avif",
+  "out": "/common/img/s/021.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|平静带怒",
+  "src": "images/characters/linxi/平静带怒.avif",
+  "out": "/common/img/s/022.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|开心",
+  "src": "images/characters/linxi/开心.avif",
+  "out": "/common/img/s/023.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|微笑",
+  "src": "images/characters/linxi/微笑.avif",
+  "out": "/common/img/s/024.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|忧伤",
+  "src": "images/characters/linxi/忧伤.avif",
+  "out": "/common/img/s/025.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|惊讶",
+  "src": "images/characters/linxi/惊讶.avif",
+  "out": "/common/img/s/026.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|无语",
+  "src": "images/characters/linxi/无语.avif",
+  "out": "/common/img/s/027.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|欲言又止",
+  "src": "images/characters/linxi/欲言又止.avif",
+  "out": "/common/img/s/028.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|白眼",
+  "src": "images/characters/linxi/白眼.avif",
+  "out": "/common/img/s/029.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|萌怒",
+  "src": "images/characters/linxi/萌怒.avif",
+  "out": "/common/img/s/030.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|闭眼微笑",
+  "src": "images/characters/linxi/闭眼微笑.avif",
+  "out": "/common/img/s/031.png"
+ },
+ {
+  "kind": "sp",
+  "key": "lx|鼓嘴气气",
+  "src": "images/characters/linxi/鼓嘴气气.avif",
+  "out": "/common/img/s/032.png"
+ },
+ {
+  "kind": "sp",
+  "key": "mother|shadow",
+  "src": "images/characters/other/女剪影.png",
+  "out": "/common/img/s/033.png"
+ },
+ {
+  "kind": "sp",
+  "key": "noctella|微笑",
+  "src": "images/characters/noctella/微笑.avif",
+  "out": "/common/img/s/034.png"
+ },
+ {
+  "kind": "sp",
+  "key": "noctella|无口",
+  "src": "images/characters/noctella/无口.avif",
+  "out": "/common/img/s/035.png"
+ },
+ {
+  "kind": "sp",
+  "key": "noctella|神之笑",
+  "src": "images/characters/noctella/神之笑.avif",
+  "out": "/common/img/s/036.png"
+ },
+ {
+  "kind": "sp",
+  "key": "other|renchao",
+  "src": "images/characters/other/renchao.png",
+  "out": "/common/img/s/037.png"
+ },
+ {
+  "kind": "sp",
+  "key": "ty_a|shadow",
+  "src": "images/characters/other/体育生.png",
+  "out": "/common/img/s/038.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl_l|卖萌叹气",
+  "src": "images/characters/xiaolian/卖萌叹气_big.avif",
+  "out": "/common/img/s/039.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl_l|卖萌哭哭",
+  "src": "images/characters/xiaolian/卖萌哭哭_big.avif",
+  "out": "/common/img/s/040.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl_l|卖萌惊讶",
+  "src": "images/characters/xiaolian/卖萌惊讶_big.avif",
+  "out": "/common/img/s/041.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl_l|卖萌气气",
+  "src": "images/characters/xiaolian/卖萌气气_big.avif",
+  "out": "/common/img/s/042.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl_l|卖萌疑惑",
+  "src": "images/characters/xiaolian/卖萌疑惑_big.avif",
+  "out": "/common/img/s/043.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl_l|害羞",
+  "src": "images/characters/xiaolian/害羞_big.avif",
+  "out": "/common/img/s/044.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl_l|抽泣",
+  "src": "images/characters/xiaolian/抽泣_big.avif",
+  "out": "/common/img/s/045.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl_l|温柔",
+  "src": "images/characters/xiaolian/温柔_big.avif",
+  "out": "/common/img/s/046.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl|卖萌叹气",
+  "src": "images/characters/xiaolian/卖萌叹气.png",
+  "out": "/common/img/s/047.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl|卖萌哭哭",
+  "src": "images/characters/xiaolian/卖萌哭哭.png",
+  "out": "/common/img/s/048.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl|卖萌惊讶",
+  "src": "images/characters/xiaolian/卖萌惊讶.png",
+  "out": "/common/img/s/049.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl|卖萌气气",
+  "src": "images/characters/xiaolian/卖萌气气.png",
+  "out": "/common/img/s/050.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl|卖萌疑惑",
+  "src": "images/characters/xiaolian/卖萌疑惑.png",
+  "out": "/common/img/s/051.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl|害羞",
+  "src": "images/characters/xiaolian/害羞.png",
+  "out": "/common/img/s/052.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl|抽泣",
+  "src": "images/characters/xiaolian/抽泣.png",
+  "out": "/common/img/s/053.png"
+ },
+ {
+  "kind": "sp",
+  "key": "xl|温柔",
+  "src": "images/characters/xiaolian/温柔.png",
+  "out": "/common/img/s/054.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_001",
+  "src": "images/cg/001.avif",
+  "out": "/common/img/c/cg_001.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_002",
+  "src": "images/cg/002.avif",
+  "out": "/common/img/c/cg_002.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_003",
+  "src": "images/cg/003.avif",
+  "out": "/common/img/c/cg_003.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_004",
+  "src": "images/cg/004.avif",
+  "out": "/common/img/c/cg_004.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_005",
+  "src": "images/cg/005.avif",
+  "out": "/common/img/c/cg_005.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_006",
+  "src": "images/cg/006.avif",
+  "out": "/common/img/c/cg_006.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_007",
+  "src": "images/cg/007.avif",
+  "out": "/common/img/c/cg_007.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_008",
+  "src": "images/cg/008.avif",
+  "out": "/common/img/c/cg_008.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_009",
+  "src": "images/cg/009.avif",
+  "out": "/common/img/c/cg_009.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_010",
+  "src": "images/cg/010.avif",
+  "out": "/common/img/c/cg_010.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_011",
+  "src": "images/cg/011.avif",
+  "out": "/common/img/c/cg_011.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_012",
+  "src": "images/cg/012.avif",
+  "out": "/common/img/c/cg_012.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_013",
+  "src": "images/cg/013.avif",
+  "out": "/common/img/c/cg_013.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_noctella_descend",
+  "src": "images/cg/noctella_descend.webp",
+  "out": "/common/img/c/cg_noctella_descend.png"
+ },
+ {
+  "kind": "cg",
+  "key": "cg_noctella_descend_full",
+  "src": "images/cg/noctella_descend.webp",
+  "out": "/common/img/c/cg_noctella_descend_full.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_001",
+  "src": "images/sdcg/001.avif",
+  "out": "/common/img/c/sd_001.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_002",
+  "src": "images/sdcg/002.avif",
+  "out": "/common/img/c/sd_002.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_003",
+  "src": "images/sdcg/003.avif",
+  "out": "/common/img/c/sd_003.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_004",
+  "src": "images/sdcg/004.avif",
+  "out": "/common/img/c/sd_004.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_005",
+  "src": "images/sdcg/005.avif",
+  "out": "/common/img/c/sd_005.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_006",
+  "src": "images/sdcg/006.avif",
+  "out": "/common/img/c/sd_006.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_007",
+  "src": "images/sdcg/007.avif",
+  "out": "/common/img/c/sd_007.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_008",
+  "src": "images/sdcg/008.avif",
+  "out": "/common/img/c/sd_008.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_009",
+  "src": "images/sdcg/009.avif",
+  "out": "/common/img/c/sd_009.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_010",
+  "src": "images/sdcg/010.avif",
+  "out": "/common/img/c/sd_010.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_011",
+  "src": "images/sdcg/011.avif",
+  "out": "/common/img/c/sd_011.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_012",
+  "src": "images/sdcg/012.avif",
+  "out": "/common/img/c/sd_012.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_013",
+  "src": "images/sdcg/013.avif",
+  "out": "/common/img/c/sd_013.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_014",
+  "src": "images/sdcg/014.avif",
+  "out": "/common/img/c/sd_014.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_015",
+  "src": "images/sdcg/015.avif",
+  "out": "/common/img/c/sd_015.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_016",
+  "src": "images/sdcg/016.avif",
+  "out": "/common/img/c/sd_016.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_017",
+  "src": "images/sdcg/017.avif",
+  "out": "/common/img/c/sd_017.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_018",
+  "src": "images/sdcg/018.avif",
+  "out": "/common/img/c/sd_018.png"
+ },
+ {
+  "kind": "cg",
+  "key": "sd_019",
+  "src": "images/sdcg/019.avif",
+  "out": "/common/img/c/sd_019.png"
+ }
+]

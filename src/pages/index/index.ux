@@ -1,0 +1,92 @@
+<template>
+  <div class="page" onswipe="ban">
+    <image class="bg" src="/common/home.png"></image>
+    <div class="shade"></div>
+
+    <div class="head">
+      <text class="title">GalGod</text>
+      <text class="sub">想成为Galgame领域大神！！！</text>
+    </div>
+
+    <div class="panel">
+      <text class="resume" if="{{hasAuto}}">最近进度 · {{autoText}}</text>
+      <text class="resume" if="{{!hasAuto}}">还没有存档，从序章开始吧</text>
+
+      <div class="btn btn-main" onclick="start" onswipe="ban"><text class="btn-t">开始阅读</text></div>
+      <div class="btn" if="{{hasAuto}}" onclick="resume" onswipe="ban"><text class="btn-t">继续阅读</text></div>
+
+      <div class="row">
+        <div class="btn btn-quarter" onclick="openSaves" onswipe="ban"><text class="btn-t">存档</text></div>
+        <div class="btn btn-quarter" onclick="openChapters" onswipe="ban"><text class="btn-t">章节</text></div>
+        <div class="btn btn-quarter" onclick="openCg" onswipe="ban"><text class="btn-t">CG</text></div>
+        <div class="btn btn-quarter" onclick="openSettings" onswipe="ban"><text class="btn-t">设置</text></div>
+      </div>
+      <div class="btn btn-quit" onclick="quit" onswipe="ban"><text class="btn-t">退出</text></div>
+    </div>
+  </div>
+</template>
+
+<style>
+  .page { width: 336px; height: 480px; background-color: #0d0910; position: relative; }
+  .bg { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; object-fit: cover; }
+  /* 压暗层：用 rgba 背景色而不是 opacity——opacity 会让运行时把整棵子树离屏合成，
+     在手环固件上会把带子节点的容器渲染成横向条纹 */
+  .shade { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
+           background-color: rgba(13, 9, 16, 0.34); }
+
+  .head { position: absolute; top: 54px; left: 0px; width: 336px; flex-direction: column; align-items: center; }
+  .title { font-size: 46px; color: #ffe9f1; font-weight: bold; }
+  .sub { font-size: 17px; color: #d6bcc8; margin-top: 6px; }
+
+  .panel { position: absolute; top: 240px; left: 0px; width: 336px; height: 240px;
+           background-color: rgba(21, 15, 25, 0.94); flex-direction: column;
+           align-items: center; padding-top: 12px; }
+  .resume { font-size: 15px; color: #b9a7b3; margin-bottom: 8px; }
+
+  .btn { width: 236px; height: 40px; border-radius: 20px; background-color: #32243a;
+         align-items: center; justify-content: center; margin-bottom: 8px; }
+  .btn-main { background-color: #b95079; }
+  .btn-quit { background-color: #241a2b; }
+  .btn-t { font-size: 19px; color: #ffffff; }
+  .row { width: 236px; flex-direction: row; justify-content: space-between; }
+  .btn-half { width: 114px; }
+  .btn-third { width: 74px; }
+  .btn-quarter { width: 54px; }
+</style>
+
+<script>
+import router from '@system.router'
+import { loadAutoSave } from '../../common/reader.js'
+
+export default {
+  // 统一用 protected，不要用 data（两者不能共存，会抛错）
+  protected: {
+    hasAuto: false,
+    autoText: ''
+  },
+
+  onInit() { this.refresh() },
+  onShow() { this.refresh() },
+
+  refresh() {
+    loadAutoSave((d) => {
+      if (!d || d.magic !== 'galgod-band-1' || !d.pc) {
+        this.hasAuto = false
+        this.autoText = ''
+        return
+      }
+      this.autoText = '第' + ((d.chapter || 0) + 1) + '章'
+      this.hasAuto = true
+    })
+  },
+
+  ban() {},
+  start() { router.push({ uri: 'pages/game' }) },
+  resume() { router.push({ uri: 'pages/game', params: { auto: '1' } }) },
+  openSaves() { router.push({ uri: 'pages/saves', params: { mode: 'load' } }) },
+  openChapters() { router.push({ uri: 'pages/chapters' }) },
+  openCg() { router.push({ uri: 'pages/cg' }) },
+  openSettings() { router.push({ uri: 'pages/settings' }) },
+  quit() { this.$app.exit() }
+}
+</script>
