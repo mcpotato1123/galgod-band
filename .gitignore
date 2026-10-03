@@ -1,0 +1,16 @@
+# deps & build output
+node_modules/
+dist/
+build/
+.temp_*/
+sign/
+*.rpk
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+
+# editor / os
+.DS_Store
+Thumbs.db

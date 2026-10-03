@@ -1,0 +1,178 @@
+<template>
+  <div class="page" onswipe="ban">
+    <text class="title">{{mode === 'save' ? '保存进度' : '读取进度'}}</text>
+    <text class="sub">{{mode === 'save' ? '点按覆盖 · 长按删除' : '点按读取 · 长按删除'}}</text>
+
+    <list class="lst" bounces="true" onswipe="ban">
+      <list-item class="item" for="{{rows}}" tid="rid" onclick="pick($idx)" onlongpress="askDelete($idx)" onswipe="ban">
+        <div class="card">
+          <div class="card-l">
+            <text class="card-name">{{$item.name}}</text>
+            <text class="card-info">{{$item.info}}</text>
+          </div>
+          <text class="card-tag">{{$item.tag}}</text>
+        </div>
+      </list-item>
+    </list>
+
+    <div class="back" onclick="back" onswipe="ban"><text class="btn-t">返回</text></div>
+
+    <div class="scrim" if="{{confirmIdx >= 0}}">
+      <div class="dialog">
+        <text class="dg-title">删除存档？</text>
+        <text class="dg-sub">此操作无法撤销</text>
+        <div class="dg-row">
+          <div class="dg-btn" onclick="cancelDelete" onswipe="ban"><text class="dg-t">取消</text></div>
+          <div class="dg-btn dg-danger" onclick="doDelete" onswipe="ban"><text class="dg-t">删除</text></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+  .page { width: 336px; height: 480px; background-color: #14101a; position: relative; }
+  .title { position: absolute; top: 12px; left: 0px; width: 336px; text-align: center;
+           font-size: 24px; color: #ffd8e6; font-weight: bold; }
+  .sub { position: absolute; top: 44px; left: 0px; width: 336px; text-align: center;
+         font-size: 14px; color: #9c8f9b; }
+
+  /* 同章节页：改用 <list>，条目放大到 86px，一屏 4 条 */
+  .lst { position: absolute; top: 68px; left: 0px; width: 336px; height: 358px; }
+
+  .item { width: 336px; height: 86px; }
+  .card { width: 312px; height: 74px; margin-left: 12px; margin-top: 6px; border-radius: 16px;
+          background-color: #241c2c; flex-direction: row; align-items: center;
+          padding-left: 16px; padding-right: 16px; }
+  .card-l { flex-direction: column; width: 232px; }
+  .card-name { font-size: 21px; color: #ffe6ef; lines: 1; }
+  .card-info { font-size: 14px; color: #9c8f9b; margin-top: 3px; lines: 1; }
+  .card-tag { font-size: 15px; color: #cf9ec0; width: 44px; text-align: right; }
+
+  .back { position: absolute; top: 432px; left: 50px; width: 236px; height: 40px;
+          border-radius: 20px; background-color: #32243a;
+          align-items: center; justify-content: center; }
+  .btn-t { font-size: 19px; color: #ffffff; }
+
+  .scrim { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
+           background-color: rgba(0, 0, 0, 0.72); align-items: center; justify-content: center; }
+  .dialog { width: 250px; height: 170px; border-radius: 18px; background-color: #241c2c;
+            flex-direction: column; align-items: center; padding-top: 20px; }
+  .dg-title { font-size: 21px; color: #ffe6ef; font-weight: bold; }
+  .dg-sub { font-size: 14px; color: #9c8f9b; margin-top: 6px; margin-bottom: 18px; }
+  .dg-row { width: 210px; flex-direction: row; justify-content: space-between; }
+  .dg-btn { width: 98px; height: 40px; border-radius: 20px; background-color: #32243a;
+            align-items: center; justify-content: center; }
+  .dg-danger { background-color: #a8355a; }
+  .dg-t { font-size: 18px; color: #ffffff; }
+</style>
+
+<script>
+import router from '@system.router'
+import prompt from '@system.prompt'
+import storage from '@system.storage'
+import { MAX_SLOTS, loadSaves, saveSaves, loadAutoSave, writeJSON } from '../../common/reader.js'
+
+const SAVE_MAGIC = 'galgod-band-1'
+
+export default {
+  // ⚠️ data 不能与 protected 同时存在（运行时会抛错并导致页面 VM 创建失败），
+  // 所以路由参数和界面状态都放进 protected
+  protected: {
+    mode: 'load',
+    rows: [],
+    confirmIdx: -1
+  },
+
+  // 非绑定状态在 onInit 里初始化
+  onInit() {
+    this.slots = []
+    this.auto = null
+    this.pending = null
+    this.suppress = false
+    loadSaves((list) => { this.slots = Array.isArray(list) ? list : [] })
+    loadAutoSave((d) => { this.auto = d })
+    storage.get({
+      key: 'pendingSave',
+      default: '',
+      success: (v) => {
+        if (v) {
+          try { this.pending = JSON.parse(v) } catch (e) { this.pending = null }
+        }
+        storage.delete({ key: 'pendingSave' })
+        this.render()
+      },
+      fail: () => this.render()
+    })
+  },
+
+  render() {
+    const rows = []
+    let ai = '（空）'
+    if (this.auto && this.auto.magic === SAVE_MAGIC) ai = this.describe(this.auto)
+    rows.push({ name: '自动存档', info: ai, tag: this.mode === 'save' ? '自动' : '读取' })
+
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      const s = this.slots[i]
+      rows.push({
+        name: '存档 ' + (i + 1),
+        info: s && s.magic === SAVE_MAGIC ? this.describe(s) : '（空）',
+        tag: this.mode === 'save' ? '覆盖' : (s ? '读取' : '空')
+      })
+    }
+    this.rows = rows
+  },
+
+  describe(s) {
+    const t = s.text || ''
+    return '第' + ((s.chapter || 0) + 1) + '章 · ' + (t.length > 12 ? t.slice(0, 12) + '…' : t)
+  },
+
+  ban() {},
+
+  pick(idx) {
+    if (this.suppress) { this.suppress = false; return }
+    if (idx === 0) {
+      if (this.mode !== 'load') { prompt.showToast({ message: '自动存档不可覆盖' }); return }
+      if (!this.auto || this.auto.magic !== SAVE_MAGIC) { prompt.showToast({ message: '暂无自动存档' }); return }
+      router.replace({ uri: 'pages/game', params: { auto: '1' } })
+      return
+    }
+    const slot = idx - 1
+    if (this.mode === 'save') {
+      if (!this.pending) { prompt.showToast({ message: '没有可保存的进度' }); return }
+      const list = this.slots.slice()
+      list[slot] = this.pending
+      this.slots = list
+      saveSaves(list, (ok) => {
+        prompt.showToast({ message: ok ? '已保存到存档 ' + (slot + 1) : '保存失败' })
+        this.render()
+      })
+      return
+    }
+    const s = this.slots[slot]
+    if (!s || s.magic !== SAVE_MAGIC) { prompt.showToast({ message: '该存档为空' }); return }
+    router.replace({ uri: 'pages/game', params: { load: String(slot) } })
+  },
+
+  askDelete(idx) {
+    if (idx === 0) { prompt.showToast({ message: '自动存档不可删除' }); return }
+    this.suppress = true
+    this.confirmIdx = idx
+  },
+
+  cancelDelete() { this.confirmIdx = -1 },
+
+  doDelete() {
+    const idx = this.confirmIdx
+    this.confirmIdx = -1
+    if (idx <= 0) return
+    const list = this.slots.slice()
+    list[idx - 1] = null
+    this.slots = list
+    saveSaves(list, () => this.render())
+  },
+
+  back() { router.back() }
+}
+</script>

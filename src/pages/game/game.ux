@@ -1,0 +1,819 @@
+<template>
+  <div class="page" onclick="onTap" onlongpress="toggleImmersive" onswipe="blockSwipe">
+
+    <!-- 背景层 -->
+    <image class="layer" src="{{bgSrc}}" if="{{bgSrc}}" onswipe="blockSwipe"></image>
+    <div class="solid" if="{{showBlack}}"></div>
+    <div class="solid-white" if="{{showWhite}}"></div>
+
+    <!-- 立绘层（三个固定槽位，避免动态节点） -->
+    <image class="sp sp-l" src="{{spL}}" if="{{spL}}" onswipe="blockSwipe"></image>
+    <image class="sp sp-c" src="{{spC}}" if="{{spC}}" onswipe="blockSwipe"></image>
+    <image class="sp sp-r" src="{{spR}}" if="{{spR}}" onswipe="blockSwipe"></image>
+
+    <!-- CG 层 -->
+    <image class="layer" src="{{cgSrc}}" if="{{cgSrc}}" onswipe="blockSwipe"></image>
+
+    <!-- 回忆滤镜 -->
+    <div class="tint" if="{{tint}}" onswipe="blockSwipe"></div>
+
+    <!-- 顶部信息条 -->
+    <div class="hud" if="{{!uiHidden && !endText}}">
+      <text class="hud-t">{{chapterTitle}}</text>
+      <text class="hud-p">{{progress}}</text>
+    </div>
+    <div class="menu-btn" if="{{!uiHidden && !endText}}" onclick="openMenu" onswipe="blockSwipe">
+      <text class="menu-ico">≡</text>
+    </div>
+
+    <!-- 对白面板（出现选项时收起，避免空框）；看 CG 时压得更透，让画面露出来 -->
+    <div class="panel" if="{{!uiHidden && !endText && !choices.length && !cgSrc}}" onswipe="blockSwipe"></div>
+    <div class="panel-cg" if="{{!uiHidden && !endText && !choices.length && cgSrc}}" onswipe="blockSwipe"></div>
+    <text class="name" if="{{!uiHidden && !endText && !choices.length && speaker}}" onswipe="blockSwipe">{{speaker}}</text>
+    <text class="l0" if="{{!uiHidden && !endText && !choices.length}}">{{l0}}</text>
+    <text class="l1" if="{{!uiHidden && !endText && !choices.length}}">{{l1}}</text>
+    <text class="l2" if="{{!uiHidden && !endText && !choices.length}}">{{l2}}</text>
+    <text class="l3" if="{{!uiHidden && !endText && !choices.length}}">{{l3}}</text>
+    <text class="l4" if="{{!uiHidden && !endText && !choices.length}}">{{l4}}</text>
+
+    <!-- 继续提示 -->
+    <text class="more" if="{{!uiHidden && !endText && !choices.length && canTap}}">▼</text>
+
+    <!-- 运行状态徽标：做成小块而不是全屏遮罩，任何情况下都不会挡住画面 -->
+    <text class="badge" if="{{badge}}">{{badge}}</text>
+
+    <!-- 分支选择 -->
+    <div class="choices" if="{{choices.length}}">
+      <text class="choice" for="{{choices}}" tid="cid" onclick="pickChoice($idx)" onswipe="blockSwipe">{{$item.x}}</text>
+    </div>
+
+    <!-- 结局 -->
+    <div class="ending" if="{{endText}}">
+      <text class="end-title">{{endText}}</text>
+      <text class="end-tip">轻触返回标题</text>
+    </div>
+
+    <!-- 阅读菜单 -->
+    <div class="menu" if="{{menu}}">
+      <text class="menu-title">阅读菜单</text>
+      <text class="menu-sub">{{chapterTitle}} · {{progress}}</text>
+      <div class="mbtn mbtn-main" onclick="closeMenu" onswipe="blockSwipe"><text class="mbtn-t">继续阅读</text></div>
+      <div class="mbtn" onclick="goSave" onswipe="blockSwipe"><text class="mbtn-t">保存进度</text></div>
+      <div class="mbtn" onclick="goLoad" onswipe="blockSwipe"><text class="mbtn-t">读取存档</text></div>
+      <div class="mbtn" onclick="toggleAuto" onswipe="blockSwipe"><text class="mbtn-t">自动播放：{{autoOn ? '开' : '关'}}</text></div>
+      <div class="mbtn" onclick="nextChapter" onswipe="blockSwipe"><text class="mbtn-t">跳到下一章</text></div>
+      <div class="mrow">
+        <div class="mbtn mbtn-half" onclick="goChapters" onswipe="blockSwipe"><text class="mbtn-t">章节</text></div>
+        <div class="mbtn mbtn-half" onclick="goCg" onswipe="blockSwipe"><text class="mbtn-t">CG</text></div>
+      </div>
+      <div class="mbtn mbtn-quit" onclick="goHome" onswipe="blockSwipe"><text class="mbtn-t">返回主页</text></div>
+      <div class="mbtn mbtn-quit" onclick="quit" onswipe="blockSwipe"><text class="mbtn-t">退出</text></div>
+    </div>
+
+  </div>
+</template>
+
+<style>
+  .page {
+    width: 336px;
+    height: 480px;
+    background-color: #000000;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .layer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; object-fit: cover; }
+  .solid { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #000000; }
+  .solid-white { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #ffffff; }
+
+  .sp { position: absolute; width: 143px; height: 380px; object-fit: contain; top: 100px; }
+  .sp-l { left: 10px; }
+  .sp-c { left: 96px; }
+  .sp-r { left: 182px; }
+
+  /* 注意：全部半透明一律用 rgba 背景色，不要用 opacity。
+     opacity 会让运行时把整棵子树离屏合成，手环固件上会把带子节点的容器画成横向条纹 */
+  .tint { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
+          background-color: rgba(240, 222, 176, 0.22); }
+
+  .hud { position: absolute; top: 10px; left: 12px; height: 26px; padding-left: 10px; padding-right: 10px;
+         border-radius: 13px; background-color: rgba(0, 0, 0, 0.55);
+         flex-direction: row; align-items: center; }
+  .hud-t { font-size: 17px; color: #ffe6ef; }
+  .hud-p { font-size: 15px; color: #b9b0b6; margin-left: 8px; }
+
+  .menu-btn { position: absolute; top: 8px; left: 290px; width: 36px; height: 36px; border-radius: 18px;
+              background-color: rgba(27, 21, 32, 0.82); align-items: center; justify-content: center; }
+  .menu-ico { font-size: 24px; color: #ffd8e6; }
+
+  .panel { position: absolute; top: 312px; left: 0px; width: 336px; height: 168px;
+           background-color: rgba(18, 13, 19, 0.80); }
+  /* 看 CG 时用更透的底板，把画面尽量露出来 */
+  .panel-cg { position: absolute; top: 333px; left: 0px; width: 336px; height: 147px;
+              background-color: rgba(10, 8, 12, 0.58); }
+
+  .name { position: absolute; top: 320px; left: 14px; font-size: 22px; color: #ffd8e6; font-weight: bold; }
+
+  .l0 { position: absolute; top: 350px; left: 14px; width: 308px; font-size: 20px; line-height: 24px; color: #ffffff; lines: 1; }
+  .l1 { position: absolute; top: 374px; left: 14px; width: 308px; font-size: 20px; line-height: 24px; color: #ffffff; lines: 1; }
+  .l2 { position: absolute; top: 398px; left: 14px; width: 308px; font-size: 20px; line-height: 24px; color: #ffffff; lines: 1; }
+  .l3 { position: absolute; top: 422px; left: 14px; width: 308px; font-size: 20px; line-height: 24px; color: #ffffff; lines: 1; }
+  .l4 { position: absolute; top: 446px; left: 14px; width: 308px; font-size: 20px; line-height: 24px; color: #ffffff; lines: 1; }
+
+  .more { position: absolute; top: 456px; left: 308px; font-size: 16px; color: #ff9ec4; }
+
+  .badge { position: absolute; top: 44px; left: 12px; width: 312px; font-size: 15px; line-height: 20px;
+           color: #ffd166; lines: 3; }
+
+  .choices { position: absolute; top: 96px; left: 16px; width: 304px; flex-direction: column; }
+  .choice { width: 304px; min-height: 52px; margin-bottom: 8px; padding: 10px; border-radius: 12px;
+            background-color: rgba(36, 26, 43, 0.94); color: #ffe6ef; font-size: 19px; line-height: 26px; }
+
+  .ending { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
+            background-color: #07060a; flex-direction: column; align-items: center; justify-content: center; }
+  .end-title { font-size: 26px; color: #ffe6ef; text-align: center; width: 280px; line-height: 36px; }
+  .end-tip { font-size: 17px; color: #7d757f; margin-top: 26px; }
+
+  .menu { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
+          background-color: #140f17; flex-direction: column; align-items: center; padding-top: 16px; }
+  .menu-title { font-size: 24px; color: #ffd8e6; font-weight: bold; }
+  .menu-sub { font-size: 15px; color: #a4979f; margin-top: 4px; margin-bottom: 12px; }
+  .mbtn { width: 240px; height: 42px; border-radius: 21px; background-color: #2c2133;
+          align-items: center; justify-content: center; margin-bottom: 8px; }
+  .mbtn-main { background-color: #b95079; }
+  .mbtn-quit { background-color: #241a2b; margin-top: 4px; }
+  .mbtn-t { font-size: 19px; color: #ffffff; }
+  .mrow { width: 240px; flex-direction: row; justify-content: space-between; }
+  .mbtn-half { width: 116px; }
+</style>
+
+<script>
+import router from '@system.router'
+import storage from '@system.storage'
+import prompt from '@system.prompt'
+import file from '@system.file'
+import { IMG } from '../../common/assets.js'
+import {
+  DEFAULT_SETTINGS, autoDelay, loadSettings, saveSettings,
+  loadAutoSave, saveAutoSave, loadSeen, saveSeen, loadCleared, markCleared
+} from '../../common/reader.js'
+
+const SAVE_MAGIC = 'galgod-band-1'
+const TAG = '[GalGod] '
+
+export default {
+  // ⚠️ Vela 运行时硬性规定：data 与 public/protected/private 不能同时存在，
+  // 同时写会直接抛 "页面VM对象中的属性data不可与public,protected,private同时存在"，
+  // 页面 VM 创建失败 → 点了按钮没任何反应。
+  // 本工程统一只用 protected：既能接路由参数（load/auto/at），又充当页面数据模型。
+  protected: {
+    // —— 路由参数（应用内传参必须在此声明才会被写入）
+    load: '',
+    auto: '',
+    at: '',
+
+    // —— 参与界面绑定的状态
+    badge: '',                 // 运行状态徽标（加载中/出错写这里，不挡画面）
+    chapterTitle: '——',
+    progress: '0%',
+    bgSrc: '', showBlack: true, showWhite: false,
+    spL: '', spC: '', spR: '',
+    cgSrc: '',
+    tint: '',
+    speaker: '',
+    l0: '', l1: '', l2: '', l3: '', l4: '',
+    canTap: false,
+    choices: [],
+    menu: false,
+    uiHidden: false,
+    endText: '',
+    autoOn: false
+  },
+
+  // ---------------------------------------------------------------- 生命周期
+  onInit() {
+    // 非绑定状态一律在 onInit 里显式初始化，避免多页面实例之间共享同一个对象
+    this.story = null
+    this.pc = 0
+    this.flags = {}
+    this.chunkStart = -1
+    this.chunkNodes = null
+    this.chunkCache = {}
+    this.chunkPending = {}
+    this.pages = ['']
+    this.pageIdx = 0
+    this.pageText = ''
+    this.typing = 0
+    this.typingToken = 0
+    this.typingAt = 0
+    this.timer = null
+    this.autoTimer = null
+    this.saveTimer = null
+    this.advanceCount = 0
+    this.csRaw = []
+    this.settings = DEFAULT_SETTINGS
+    this.lockTap = 0
+    // CG 鉴赏解锁记录：看到过的 CG 图片下标（对应原作的 seen_image）
+    this.seenIdx = {}
+    this.seenList = []
+    this.seenTimer = null
+    this.cleared = false
+    loadCleared((ok) => { this.cleared = ok })
+    loadSeen((list) => {
+      this.seenList = list.slice()
+      for (let i = 0; i < this.seenList.length; i++) this.seenIdx[this.seenList[i]] = 1
+    })
+
+    this.log('onInit，参数 at=' + this.at + ' load=' + this.load + ' auto=' + this.auto)
+    try {
+      loadSettings((s) => {
+        this.settings = s
+        this.autoOn = !!s.auto
+        this.log('设置已载入 speed=' + s.speed)
+        this.bootstrap()
+      })
+    } catch (e) {
+      this.fail('onInit', e)
+    }
+    // 看门狗：8 秒还没出内容就把内部状态显示出来，方便定位
+    this.watch = setTimeout(() => {
+      if (!this.pageText && !this.endText) {
+        this.badge = '卡在: ' + (this.dbg || '未知阶段')
+        this.log('看门狗触发 ' + this.badge)
+      }
+    }, 8000)
+  },
+
+  onShow() {
+    if (this.pageText) {
+      this.typingToken++
+      this.renderTyping(this.pageText.length)
+    }
+  },
+  onHide() { this.clearTimers(); this.flushAutoSave(); this.flushSeen() },
+  onDestroy() {
+    this.clearTimers()
+    this.flushAutoSave()
+    this.flushSeen()
+    if (this.watch) { clearTimeout(this.watch); this.watch = null }
+    this.chunkCache = {}
+    this.chunkPending = {}
+    this.chunkNodes = null
+    this.story = null
+  },
+  onBackPress() {
+    if (this.menu) { this.menu = false; return true }
+    this.menu = true
+    this.clearAuto()
+    return true
+  },
+
+  // ---------------------------------------------------------------- 日志与错误
+  log(msg, force) {
+    this.dbg = msg
+    // 只有还没出内容时（首次载入）才把状态显示在屏幕上，正常阅读时不打扰
+    if (force || !this.pageText) this.badge = msg
+    try { console.log(TAG + msg) } catch (e) {}
+  },
+  fail(where, e) {
+    const msg = where + ' 出错: ' + (e && e.message ? e.message : e)
+    this.badge = msg
+    try { console.error(TAG + msg) } catch (err) {}
+  },
+
+  // ---------------------------------------------------------------- 启动
+  bootstrap() {
+    try {
+      this.readIndex()
+    } catch (e) {
+      this.fail('bootstrap', e)
+    }
+  },
+
+  readIndex() {
+    this.log('读取剧本索引…')
+    file.readText({
+      uri: '/common/story/index.txt',
+      success: (data) => {
+        try {
+          const idx = JSON.parse(data.text)
+          if (!idx || !idx.chunks || !idx.chapters) {
+            this.badge = '剧本索引损坏'
+            this.log('索引字段缺失')
+            return
+          }
+          this.story = idx
+          this.flags = {}
+          this.log('索引 OK：节点 ' + idx.nodeCount + '，分块 ' + idx.chunks.length)
+          this.afterIndex()
+        } catch (e) {
+          this.fail('解析索引', e)
+        }
+      },
+      fail: (d, code) => {
+        this.badge = '读不到剧本索引 (code ' + code + ')'
+        this.log('索引读取失败 code=' + code)
+      }
+    })
+  },
+
+  afterIndex() {
+    const at = this.at === undefined || this.at === null ? '' : String(this.at)
+    const load = this.load === undefined || this.load === null ? '' : String(this.load)
+    const auto = this.auto === undefined || this.auto === null ? '' : String(this.auto)
+
+    if (at !== '') {
+      let target = parseInt(at, 10)
+      if (!(target >= 0)) target = 0
+      this.log('按章节跳转 -> 节点 ' + target)
+      this.goto(target)
+      return
+    }
+    loadAutoSave((autoData) => {
+      try {
+        if (load !== '') {
+          this.restoreFromSlot(parseInt(load, 10))
+        } else if (auto === '1' && autoData && autoData.magic === SAVE_MAGIC) {
+          this.log('从自动存档继续')
+          this.applySave(autoData)
+        } else {
+          this.log('从序章开始')
+          this.goto(0)
+        }
+      } catch (e) {
+        this.fail('afterIndex', e)
+      }
+    })
+  },
+
+  restoreFromSlot(slot) {
+    if (!(slot >= 0)) { this.goto(0); return }
+    this.log('读取存档槽 ' + slot)
+    storage.get({
+      key: 'saves',
+      default: '',
+      success: (v) => {
+        try {
+          const list = v ? JSON.parse(v) : []
+          const d = list[slot]
+          if (!d || d.magic !== SAVE_MAGIC) {
+            this.badge = '存档不存在'
+            this.goto(0)
+            return
+          }
+          this.applySave(d)
+        } catch (e) {
+          this.fail('读档', e)
+          this.goto(0)
+        }
+      },
+      fail: () => this.goto(0)
+    })
+  },
+
+  applySave(data) {
+    this.flags = data.flags || {}
+    this.bgSrc = data.bgSrc || ''
+    this.showBlack = !!data.showBlack
+    this.showWhite = !!data.showWhite
+    this.csRaw = data.cs || []
+    this.renderSprites(this.csRaw)
+    this.cgSrc = data.cgSrc || ''
+    this.tint = data.tint || ''
+    this.goto(data.pc || 0)
+  },
+
+  collectSave() {
+    return {
+      magic: SAVE_MAGIC,
+      pc: this.pc,
+      chapter: this.chapterIndex(),
+      flags: Object.assign({}, this.flags),
+      bgSrc: this.bgSrc,
+      showBlack: this.showBlack,
+      showWhite: this.showWhite,
+      cs: this.csRaw.slice(),
+      cgSrc: this.cgSrc,
+      tint: this.tint,
+      text: this.previewText(),
+      at: Date.now()
+    }
+  },
+
+  previewText() {
+    const t = String(this.pageText || this.l0 || '').split('\n')[0]
+    return t.length > 24 ? t.slice(0, 24) + '…' : t
+  },
+
+  chapterIndex() {
+    if (!this.story) return 0
+    const list = this.story.chapters
+    let cur = 0
+    for (let i = 0; i < list.length; i++) if (this.pc >= list[i].start) cur = i
+    return cur
+  },
+
+  updateHud() {
+    if (!this.story) return
+    const list = this.story.chapters
+    const i = this.chapterIndex()
+    const ch = list[i]
+    if (!ch) { this.chapterTitle = '——'; this.progress = '0%'; return }
+    this.chapterTitle = ch.title
+    const end = list[i + 1] ? list[i + 1].start : this.story.nodeCount
+    const span = Math.max(1, end - ch.start)
+    const done = Math.max(0, this.pc - ch.start)
+    this.progress = Math.min(99, Math.round(done * 100 / span)) + '%'
+  },
+
+  // ---------------------------------------------------------------- 分块调度
+  chunkOf(index) {
+    const list = this.story.chunks
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i]
+      if (index >= c.start && index < c.start + c.count) return c
+    }
+    return null
+  },
+
+  inChunk(index) {
+    return !!this.chunkNodes && this.chunkStart >= 0 &&
+      index >= this.chunkStart && index < this.chunkStart + this.chunkNodes.length
+  },
+
+  readChunk(chunk, done) {
+    // 自愈：万一框架没有把 onInit 里设好的状态保留下来，这里补上，
+    // 避免 undefined[...] 抛异常把加载流程整个打断
+    if (!this.chunkCache) this.chunkCache = {}
+    if (!this.chunkPending) this.chunkPending = {}
+    const cached = this.chunkCache[chunk.start]
+    if (cached) { done(cached); return }
+    const wait = this.chunkPending[chunk.start]
+    if (wait) { wait.push(done); return }
+    this.chunkPending[chunk.start] = [done]
+    const finish = (nodes, err) => {
+      const list = this.chunkPending[chunk.start] || []
+      delete this.chunkPending[chunk.start]
+      if (err || !nodes) {
+        for (let i = 0; i < list.length; i++) { try { list[i](null) } catch (e) {} }
+        return
+      }
+      this.chunkCache[chunk.start] = nodes
+      for (let i = 0; i < list.length; i++) { try { list[i](nodes) } catch (e) {} }
+    }
+    file.readText({
+      uri: chunk.file,
+      success: (data) => {
+        try {
+          const nodes = JSON.parse(data.text)
+          if (!nodes || nodes.length !== chunk.count) {
+            this.badge = '分块长度不符 ' + chunk.file
+            finish(null, true)
+            return
+          }
+          this.log('分块 OK ' + chunk.file + ' (' + nodes.length + ' 节点)')
+          finish(nodes)
+        } catch (e) {
+          this.fail('解析分块 ' + chunk.file, e)
+          finish(null, true)
+        }
+      },
+      fail: (d, code) => {
+        this.badge = '读不到分块 ' + chunk.file + ' (code ' + code + ')'
+        this.log('分块读取失败 ' + chunk.file + ' code=' + code)
+        finish(null, true)
+      }
+    })
+  },
+
+  trimCache(index) {
+    const cur = this.chunkOf(index)
+    if (!cur) return
+    const list = this.story.chunks
+    const pos = list.indexOf(cur)
+    const keep = {}
+    keep[cur.start] = 1
+    if (pos >= 0 && list[pos + 1]) keep[list[pos + 1].start] = 1
+    for (const k in this.chunkCache) if (!keep[k]) delete this.chunkCache[k]
+  },
+
+  prefetch(index) {
+    const cur = this.chunkOf(index)
+    if (!cur) return
+    const list = this.story.chunks
+    const pos = list.indexOf(cur)
+    const next = pos >= 0 ? list[pos + 1] : null
+    if (!next || this.chunkCache[next.start]) return
+    this.readChunk(next, () => {})
+  },
+
+  goto(index) {
+    try {
+      if (!this.story) { this.badge = '剧本未载入'; return }
+      if (!(index >= 0) || index >= this.story.nodeCount) {
+        this.badge = '节点越界 ' + index
+        this.finishAll()
+        return
+      }
+      this.pc = index
+      if (this.inChunk(index)) { this.step(); return }
+      const chunk = this.chunkOf(index)
+      if (!chunk) { this.badge = '找不到节点 ' + index + ' 所属分块'; return }
+      this.log('读取分块 ' + chunk.file + ' …')
+      this.readChunk(chunk, (nodes) => {
+        if (!nodes) return
+        this.chunkNodes = nodes
+        this.chunkStart = chunk.start
+        this.step()
+      })
+    } catch (e) {
+      this.fail('goto(' + index + ')', e)
+    }
+  },
+
+  // ---------------------------------------------------------------- 节点执行
+  step() {
+    try {
+      if (!this.story) return
+      let guard = 0
+      while (guard++ < 3000) {
+        if (this.pc >= this.story.nodeCount) { this.finishAll(); return }
+        if (!this.inChunk(this.pc)) { this.prefetch(this.pc); this.goto(this.pc); return }
+        const node = this.chunkNodes[this.pc - this.chunkStart]
+        if (!node) { this.badge = '节点为空 ' + this.pc; return }
+
+        if (node.bg !== undefined) this.applyBg(node.bg)
+        if (node.cs !== undefined) { this.csRaw = node.cs; this.renderSprites(node.cs) }
+        if (node.cg !== undefined) {
+          this.cgSrc = node.cg >= 0 ? (IMG[node.cg] || '') : ''
+          if (node.cg >= 0) this.markSeen(node.cg)
+        }
+        if (node.tint !== undefined) this.tint = node.tint
+
+        if (node.t === 's') {
+          this.updateHud(); this.prefetch(this.pc); this.trimCache(this.pc)
+          this.playSay(node)
+          return
+        }
+        if (node.t === 'o') {
+          this.updateHud(); this.prefetch(this.pc); this.trimCache(this.pc)
+          this.playChoice(node)
+          return
+        }
+        if (node.t === 'e') { this.updateHud(); this.playEnd(node); return }
+
+        if (node.t === 'f') { this.flags[node.v] = (this.flags[node.v] || 0) + node.n; this.pc++ }
+        else if (node.t === 'sf') { this.flags[node.v] = node.n; this.pc++ }
+        else if (node.t === 'j') { this.pc = node.j }
+        else if (node.t === 'cj') { this.pc = this.testCond(node) ? node.j : this.pc + 1 }
+        else this.pc++
+      }
+      this.badge = '节点执行超过上限，疑似死循环'
+    } catch (e) {
+      this.fail('step@' + this.pc, e)
+    }
+  },
+
+  testCond(node) {
+    const v = this.flags[node.v] || 0
+    const n = node.n
+    if (node.op === '>=') return v >= n
+    if (node.op === '<=') return v <= n
+    if (node.op === '>') return v > n
+    if (node.op === '<') return v < n
+    return v === n
+  },
+
+  applyBg(idx) {
+    this.bgSrc = idx >= 0 ? (IMG[idx] || '') : ''
+    this.showBlack = idx === -1
+    this.showWhite = idx === -2
+  },
+
+  renderSprites(cs) {
+    let l = '', c = '', r = ''
+    for (let i = 0; i < cs.length; i++) {
+      const ch = cs[i]
+      const src = IMG[ch.i] || ''
+      if (ch.s === 'left') l = src
+      else if (ch.s === 'right') r = src
+      else c = src
+    }
+    this.spL = l; this.spC = c; this.spR = r
+  },
+
+  // ---------------------------------------------------------------- CG 解锁记录
+  markSeen(i) {
+    if (!this.seenIdx) { this.seenIdx = {}; this.seenList = [] }
+    if (this.seenIdx[i]) return
+    this.seenIdx[i] = 1
+    this.seenList.push(i)
+    if (this.seenTimer) clearTimeout(this.seenTimer)
+    this.seenTimer = setTimeout(() => { this.seenTimer = null; this.flushSeen() }, 500)
+  },
+
+  flushSeen() {
+    if (this.seenTimer) { clearTimeout(this.seenTimer); this.seenTimer = null }
+    if (this.seenList && this.seenList.length) saveSeen(this.seenList)
+  },
+
+  // ---------------------------------------------------------------- 台词与打字机
+  playSay(node) {
+    if (this.watch) { clearTimeout(this.watch); this.watch = null }
+    this.badge = ''
+    this.choices = []
+    this.endText = ''
+    this.speaker = node.n || ''
+    this.pages = (node.p && node.p.length) ? node.p : ['']
+    this.pageIdx = 0
+    this.playPage()
+  },
+
+  playPage() {
+    this.clearAuto()
+    this.pageText = this.pages[this.pageIdx] || ''
+    this.typing = 0
+    this.renderTyping(0)
+    const speed = this.settings.speed
+    if (!speed) { this.finishTyping(); return }
+    this.typingToken++
+    this.typingAt = Date.now()
+    this.tickTyping(this.typingToken)
+  },
+
+  tickTyping(token) {
+    if (token !== this.typingToken) return
+    const speed = this.settings.speed
+    const full = this.pageText.length
+    const elapsed = Math.max(0, Date.now() - this.typingAt)
+    const n = Math.max(this.typing + 1, Math.floor(elapsed / speed) + 1)
+    if (n >= full) { this.typing = full; this.renderTyping(full); this.finishTyping(); return }
+    this.typing = n
+    this.renderTyping(n)
+    this.timer = setTimeout(() => this.tickTyping(token), 50)
+  },
+
+  renderTyping(n) {
+    const full = this.pageText || ''
+    const shown = n >= full.length ? full : full.slice(0, n)
+    const seg = shown.split('\n')
+    this.l0 = seg[0] || ''
+    this.l1 = seg[1] || ''
+    this.l2 = seg[2] || ''
+    this.l3 = seg[3] || ''
+    this.l4 = seg[4] || ''
+    this.canTap = n >= full.length
+  },
+
+  finishTyping() {
+    this.typingToken++
+    if (this.timer) { clearTimeout(this.timer); this.timer = null }
+    this.typing = (this.pageText || '').length
+    this.renderTyping(this.typing)
+    this.scheduleAuto()
+  },
+
+  scheduleAuto() {
+    this.clearAuto()
+    if (!this.settings.auto || this.choices.length || this.endText) return
+    const wait = autoDelay(this.pageText, this.settings.autoSpeed)
+    this.autoTimer = setTimeout(() => { this.autoTimer = null; this.onTap() }, wait)
+  },
+
+  clearAuto() { if (this.autoTimer) { clearTimeout(this.autoTimer); this.autoTimer = null } },
+  clearTimers() {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null }
+    if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null }
+    this.clearAuto()
+    this.typingToken++
+  },
+
+  // ---------------------------------------------------------------- 交互
+  onTap() {
+    if (this.lockTap && Date.now() - this.lockTap < 400) return
+    if (this.endText) { router.replace({ uri: 'pages/index' }); return }
+    if (this.menu || this.choices.length) return
+    this.clearAuto()
+    if (!this.canTap) { this.finishTyping(); return }
+    if (this.pageIdx < this.pages.length - 1) { this.pageIdx++; this.playPage(); return }
+    this.pc++
+    this.bumpAutoSave()
+    this.step()
+  },
+
+  lock() { this.lockTap = Date.now() },
+
+  toggleImmersive() {
+    if (this.menu || this.endText) return
+    this.lock()
+    this.uiHidden = !this.uiHidden
+    this.clearAuto()
+  },
+
+  blockSwipe() {},
+
+  openMenu() { this.lock(); this.menu = true; this.clearAuto() },
+  closeMenu() { this.lock(); this.menu = false; this.scheduleAuto() },
+
+  toggleAuto() {
+    this.lock()
+    const s = Object.assign({}, this.settings)
+    s.auto = !s.auto
+    this.settings = s
+    this.autoOn = !!s.auto
+    saveSettings(s)
+    this.menu = false
+    this.scheduleAuto()
+  },
+
+  nextChapter() {
+    this.lock()
+    this.menu = false
+    if (!this.story) return
+    // 跳过结局章；后日谈没通关也不给跳（否则等于剧透）
+    const list = this.story.chapters
+    let i = this.chapterIndex() + 1
+    while (i < list.length && (list[i].hide || (list[i].need && !this.cleared))) i++
+    const nx = list[i]
+    if (!nx) { prompt.showToast({ message: '已经是最后一章' }); this.scheduleAuto(); return }
+    this.goto(nx.start)
+  },
+
+  goSave() {
+    this.lock()
+    this.menu = false
+    storage.set({
+      key: 'pendingSave',
+      value: JSON.stringify(this.collectSave()),
+      success: () => router.push({ uri: 'pages/saves', params: { mode: 'save' } }),
+      fail: () => { this.badge = '无法准备存档' }
+    })
+  },
+  goLoad() { this.lock(); this.menu = false; this.flushSeen(); router.push({ uri: 'pages/saves', params: { mode: 'load' } }) },
+  goChapters() { this.lock(); this.menu = false; this.flushSeen(); router.push({ uri: 'pages/chapters' }) },
+  goCg() { this.lock(); this.menu = false; this.flushSeen(); router.push({ uri: 'pages/cg' }) },
+  goHome() { this.lock(); this.flushAutoSave(); this.flushSeen(); router.replace({ uri: 'pages/index' }) },
+  quit() { this.lock(); this.flushAutoSave(); this.flushSeen(); this.$app.exit() },
+
+  // ---------------------------------------------------------------- 结局 / 分支
+  playEnd(node) {
+    this.clearTimers()
+    if (this.watch) { clearTimeout(this.watch); this.watch = null }
+    this.badge = ''
+    this.choices = []
+    this.endText = node.x || '剧终'
+    // 走到终点时 true_end_finish 为 1，说明这一周目通的是真结局 → 记下通关
+    if (this.flags && this.flags.true_end_finish === 1) {
+      this.cleared = true
+      markCleared()
+    }
+    saveAutoSave(this.collectSave())
+  },
+
+  finishAll() { this.playEnd({ x: '—— 全剧终 ——' }) },
+
+  playChoice(node) {
+    this.clearAuto()
+    if (this.watch) { clearTimeout(this.watch); this.watch = null }
+    this.badge = ''
+    this.l0 = ''; this.l1 = ''; this.l2 = ''; this.l3 = ''; this.l4 = ''
+    this.speaker = ''
+    this.pageText = ''
+    this.canTap = false
+    const out = []
+    const opts = node.o || []
+    for (let i = 0; i < opts.length; i++) {
+      const o = opts[i]
+      if (o.c && !this.testCond({ v: o.c[0], op: o.c[1], n: o.c[2] })) continue
+      out.push({ x: o.x, j: o.j })
+    }
+    this.choices = out
+  },
+
+  pickChoice(idx) {
+    this.lock()
+    const c = this.choices[idx]
+    if (!c) return
+    this.choices = []
+    this.pc = c.j
+    this.bumpAutoSave()
+    this.step()
+  },
+
+  // ---------------------------------------------------------------- 自动存档
+  bumpAutoSave() {
+    this.advanceCount++
+    if (this.advanceCount < 8) return
+    this.advanceCount = 0
+    if (this.saveTimer) clearTimeout(this.saveTimer)
+    this.saveTimer = setTimeout(() => { this.saveTimer = null; this.flushAutoSave() }, 400)
+  },
+
+  flushAutoSave() {
+    if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null }
+    if (!this.story || !this.pc) return
+    this.advanceCount = 0
+    saveAutoSave(this.collectSave())
+  }
+}
+</script>

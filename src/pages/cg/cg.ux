@@ -1,0 +1,172 @@
+<template>
+  <div class="page" onswipe="ban">
+    <text class="title">CG 鉴赏</text>
+    <text class="sub">已解锁 {{openCount}} / {{total}} 组 · 点按查看</text>
+
+    <list class="lst" bounces="true" onswipe="ban">
+      <list-item class="item" for="{{rows}}" tid="gid" onclick="open($idx)" onswipe="ban">
+        <div class="card">
+          <image class="thumb" src="{{$item.th}}" if="{{$item.ok}}"></image>
+          <div class="lock" if="{{!$item.ok}}">
+            <text class="lock-t">?</text>
+          </div>
+          <text class="nm">{{$item.n}}</text>
+          <text class="st">{{$item.st}}</text>
+        </div>
+      </list-item>
+    </list>
+
+    <div class="back" onclick="back" onswipe="ban"><text class="btn-t">返回</text></div>
+
+    <!-- 大图查看 -->
+    <div class="viewer" if="{{viewing}}">
+      <image class="big" src="{{bigSrc}}" onswipe="ban"></image>
+      <div class="vclose" onclick="closeView" onswipe="ban"><text class="vclose-t">关闭</text></div>
+      <div class="vbar">
+        <div class="vbtn" onclick="prev" onswipe="ban"><text class="vbtn-t">‹</text></div>
+        <text class="vnum">{{pageNo}} / {{pageAll}}</text>
+        <div class="vbtn" onclick="next" onswipe="ban"><text class="vbtn-t">›</text></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+  .page { width: 336px; height: 480px; background-color: #14101a; position: relative; }
+  .title { position: absolute; top: 12px; left: 0px; width: 336px; text-align: center;
+           font-size: 24px; color: #ffd8e6; font-weight: bold; }
+  .sub { position: absolute; top: 44px; left: 0px; width: 336px; text-align: center;
+         font-size: 14px; color: #9c8f9b; }
+
+  .lst { position: absolute; top: 68px; left: 0px; width: 336px; height: 358px; }
+
+  .item { width: 336px; height: 86px; }
+  .card { width: 312px; height: 74px; margin-left: 12px; margin-top: 6px; border-radius: 16px;
+          background-color: #241c2c; flex-direction: row; align-items: center;
+          padding-left: 10px; padding-right: 14px; }
+  .thumb { width: 96px; height: 54px; border-radius: 8px; }
+  .lock { width: 96px; height: 54px; border-radius: 8px; background-color: #191320;
+          align-items: center; justify-content: center; }
+  .lock-t { font-size: 26px; color: #4c4055; }
+  .nm { font-size: 21px; color: #ffe6ef; width: 154px; margin-left: 12px; lines: 1; }
+  .st { font-size: 14px; color: #9c8f9b; width: 36px; text-align: right; }
+
+  .back { position: absolute; top: 432px; left: 50px; width: 236px; height: 40px;
+          border-radius: 20px; background-color: #32243a;
+          align-items: center; justify-content: center; }
+  .btn-t { font-size: 19px; color: #ffffff; }
+
+  .viewer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
+            background-color: #000000; }
+  .big { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; object-fit: cover; }
+  .vclose { position: absolute; top: 10px; left: 262px; width: 64px; height: 34px;
+            border-radius: 17px; background-color: rgba(0, 0, 0, 0.62);
+            align-items: center; justify-content: center; }
+  .vclose-t { font-size: 17px; color: #ffe6ef; }
+  .vbar { position: absolute; top: 428px; left: 88px; width: 160px; height: 42px;
+          border-radius: 21px; background-color: rgba(0, 0, 0, 0.62);
+          flex-direction: row; align-items: center; justify-content: space-between;
+          padding-left: 6px; padding-right: 6px; }
+  .vbtn { width: 46px; height: 34px; border-radius: 17px; background-color: #32243a;
+          align-items: center; justify-content: center; }
+  .vbtn-t { font-size: 22px; color: #ffffff; }
+  .vnum { font-size: 16px; color: #d8cbd2; }
+</style>
+
+<script>
+import router from '@system.router'
+import prompt from '@system.prompt'
+import { CGG } from '../../common/cglist.js'
+import { IMG } from '../../common/assets.js'
+import { loadSeen } from '../../common/reader.js'
+
+export default {
+  // 统一用 protected，不要用 data（两者不能共存，运行时会抛错）
+  protected: {
+    rows: [],
+    openCount: 0,
+    total: 0,
+    viewing: false,
+    bigSrc: '',
+    pageNo: 1,
+    pageAll: 1
+  },
+
+  onInit() {
+    this.seen = {}
+    this.groups = CGG || []
+    this.curGroup = -1
+    this.curPage = 0
+    this.lockTap = 0
+    loadSeen((list) => {
+      for (let i = 0; i < list.length; i++) this.seen[list[i]] = 1
+      this.build()
+    })
+  },
+
+  build() {
+    const rows = []
+    let open = 0
+    for (let i = 0; i < this.groups.length; i++) {
+      const g = this.groups[i]
+      const ok = !!this.seen[g.u]
+      if (ok) open++
+      rows.push({
+        th: g.th,
+        n: g.n,
+        ok: ok,
+        st: ok ? (g.im.length + ' 张') : '未解锁'
+      })
+    }
+    this.rows = rows
+    this.openCount = open
+    this.total = this.groups.length
+  },
+
+  ban() {},
+  lock() { this.lockTap = Date.now() },
+
+  open(i) {
+    this.lock()
+    const g = this.groups[i]
+    if (!g) return
+    if (!this.seen[g.u]) {
+      prompt.showToast({ message: '还没在剧情里看到这一组' })
+      return
+    }
+    this.curGroup = i
+    this.curPage = 0
+    this.showPage()
+    this.viewing = true
+  },
+
+  showPage() {
+    const g = this.groups[this.curGroup]
+    if (!g) return
+    const idx = g.im[this.curPage]
+    this.bigSrc = IMG[idx] || ''
+    this.pageNo = this.curPage + 1
+    this.pageAll = g.im.length
+  },
+
+  prev() {
+    this.lock()
+    const g = this.groups[this.curGroup]
+    if (!g) return
+    this.curPage = (this.curPage - 1 + g.im.length) % g.im.length
+    this.showPage()
+  },
+
+  next() {
+    this.lock()
+    const g = this.groups[this.curGroup]
+    if (!g) return
+    this.curPage = (this.curPage + 1) % g.im.length
+    this.showPage()
+  },
+
+  closeView() { this.lock(); this.viewing = false; this.bigSrc = '' },
+
+  back() { router.back() }
+}
+</script>
