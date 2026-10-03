@@ -72,7 +72,7 @@ GalGod手环版/
 
 ```bash
 npm install                    # 只有 aiot-toolkit 一个真正的依赖
-npm run build                  # → dist/com.galgod.band.debug.1.0.0.rpk
+npm run build                  # → dist/com.galgod.band.debug.2.0.rpk
 npm run start                  # 起模拟器预览（需要 AIoT-IDE/模拟器环境）
 ```
 
