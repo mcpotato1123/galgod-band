@@ -92,7 +92,7 @@ python tools/preview_ui.py "%GALGOD_RAW%" .
 
 ---
 
-## 三、安装到手环
+## 三、安装到手环（以**Astrobox**为例）
 
 `dist/` 里的 **debug rpk 可以直接侧载**，不需要签名证书。
 
