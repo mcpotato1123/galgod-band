@@ -10,7 +10,7 @@
 美术      136 张（背景 38 / 立绘 55 / CG 34 / 鉴赏缩略图 9）+ 标题画 + 图标
 分支      15 个选择点，3 条结局线 + 1 个 Bad End
 CG 鉴赏   9 组 / 32 张差分图，按原作 gallery.rpy 的分组与解锁条件
-产物      dist/com.galgod.band.debug.1.1.1.rpk   4.76 MB
+产物      dist/com.galgod.band.debug.2.0.rpk   4.76 MB
 ```
 
 > **免责声明**：本项目是非官方的个人移植，仅供学习交流。
