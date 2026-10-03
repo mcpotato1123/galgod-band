@@ -96,10 +96,10 @@ python tools/preview_ui.py "%GALGOD_RAW%" .
 
 `dist/` 里的 **debug rpk 可以直接侧载**，不需要签名证书。
 
-1. 手机装 **小米运动健康**
-2. 【我的】→【关于】→ 连点进入 **Debug**
-3. 【第三方应用】→ 点 `Click to input package name` → 随便输几个字符
-4. 【Install third app】→ 选本地 rpk 文件
+1. 手机装 **Astrobox**
+2. 【设置】→【账号与安全】→ 登录小米账号→导入在小米运动健康绑定的设备→下面的请连接设备连接手环
+3. 【探索】→ 点 `安装快应用` → 找下载的文件（可能在最近项目里，若没有点**左上角**三个杠，找你手机的型号的图标，点开找Download或下载的文件夹，里面就有文件了）
+4. 等**Astrobox**右下角的圆环跑满
 5. 手环上会出现 **GalGod** 图标
 
 > 官方 FAQ：<https://iot.mi.com/vela/quickapp/zh/guide/other/faq.html>
