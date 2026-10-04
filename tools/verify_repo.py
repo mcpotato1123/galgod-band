@@ -106,11 +106,18 @@ def check_markers(root):
 
     # README
     rd = read(os.path.join(root, 'README.md')) or ''
-    for k in (str(ver) + '.rpk', '关于页与彩蛋', 'MIT 协议',
+    for k in (str(ver) + '.rpk', '关于页与彩蛋', 'MIT 协议', '故事梗概',
               '诺提拉观察所', 'Astrobox', 'a3436370081@163.com'):
         need(k in rd, 'README 含 ' + k)
     for bad in ('CHARS_PER_LINE', 'mcpotato1123'):
         need(bad not in rd, 'README 无过时内容 ' + bad)
+    # README 的故事梗概一节不应包含剧透
+    seg = rd.split('## 故事梗概', 1)
+    if len(seg) > 1:
+        body = seg[1].split('\n## ', 1)[0]
+        for spoil in ('真结局 · 这片月幕', '结局 · 二人的世界', '结局 · 回归日常',
+                      'Bad End · 未能触碰的世界'):
+            need(spoil not in body, 'README 梗概无剧透 ' + spoil)
 
     return ok
 
