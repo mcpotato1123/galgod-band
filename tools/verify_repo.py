@@ -14,6 +14,12 @@ import json
 import os
 import sys
 
+# 输出里带 ✔/✖，Windows 控制台默认是 GBK，直接 print 会抛 UnicodeEncodeError 把脚本打断
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 SKIP_DIRS = {'node_modules', '.git', 'dist', 'build', '__pycache__', '.temp_'}
 
 

@@ -11,6 +11,12 @@
 """
 import io, os, sys
 
+# 输出里带 ✔/✖，Windows 控制台默认是 GBK，直接 print 会抛 UnicodeEncodeError 把脚本打断
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 TEXT_EXT = {".md", ".json", ".js", ".ux", ".py", ".txt", ".css", ".html", ".yml", ".yaml"}
 TEXT_NAME = {".gitignore", ".npmrc", "LICENSE"}
 BAD_DIRS = {"node_modules", "build", "dist", "__pycache__", ".git"}
