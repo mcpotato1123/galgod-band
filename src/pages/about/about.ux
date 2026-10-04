@@ -1,0 +1,200 @@
+<template>
+  <div class="page" onswipe="ban">
+    <!-- 彩蛋触发点：连点「关于」7 次 -->
+    <text class="title" onclick="tapTitle" onswipe="ban">关于</text>
+    <text class="dots">{{dots}}</text>
+    <text class="sub">GalGod · 小米手环 9 Pro 版 · v{{ver}}</text>
+
+    <list id="about-list" class="lst" bounces="true" onswipe="ban">
+      <list-item class="item" for="{{rows}}" tid="ab">
+        <div class="card">
+          <text class="{{$item.c}}">{{$item.t}}</text>
+        </div>
+      </list-item>
+    </list>
+
+    <div class="back" onclick="back" onswipe="ban"><text class="btn-t">返回</text></div>
+
+    <!-- 彩蛋菜单 -->
+    <div class="mask" if="{{eggOpen}}"></div>
+    <div class="egg" if="{{eggOpen}}">
+      <text class="egg-t">？？？</text>
+      <div class="egg-b" onclick="unlockAfter" onswipe="ban"><text class="egg-bt">解锁 · 后日谈</text></div>
+      <div class="egg-b" onclick="unlockCg" onswipe="ban"><text class="egg-bt">解锁 · 全部 CG</text></div>
+      <div class="egg-b egg-c" onclick="closeEgg" onswipe="ban"><text class="egg-bt">关闭</text></div>
+    </div>
+  </div>
+</template>
+
+<style>
+  .page { width: 336px; height: 480px; background-color: #14101a; position: relative; }
+  .title { position: absolute; top: 4px; left: 0px; width: 336px; text-align: center;
+           font-size: 22px; color: #ffd8e6; font-weight: bold; }
+  .dots { position: absolute; top: 10px; left: 286px; width: 40px; font-size: 15px;
+          color: #ff9ec4; }
+  .sub { position: absolute; top: 36px; left: 0px; width: 336px; text-align: center;
+         font-size: 12px; color: #9c8f9b; }
+
+  /* 关于页是一个可滚动的文本页：<list> 的每一行固定 25px。
+     三种行样式高度完全一致（只改颜色），避免条目高度不一致导致排版错乱。 */
+  .lst { position: absolute; top: 58px; left: 0px; width: 336px; height: 366px; }
+  .item { width: 336px; height: 25px; }
+  .card { width: 336px; height: 25px; flex-direction: row; align-items: center;
+          padding-left: 14px; }
+  .r-p { width: 308px; font-size: 15px; color: #d9cdd6; lines: 1; }
+  .r-s { width: 308px; font-size: 15px; color: #ffb3cd; lines: 1; }
+  .r-g { width: 308px; font-size: 6px; color: #14101a; }
+
+  .back { position: absolute; top: 432px; left: 50px; width: 236px; height: 40px;
+          border-radius: 20px; background-color: #32243a;
+          align-items: center; justify-content: center; }
+  .btn-t { font-size: 19px; color: #ffffff; }
+
+  /* 彩蛋菜单 */
+  .mask { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
+          background-color: rgba(8, 6, 10, 0.72); }
+  .egg { position: absolute; top: 132px; left: 32px; width: 272px; height: 212px;
+         background-color: #241c2c; border-radius: 18px; flex-direction: column;
+         align-items: center; padding-top: 14px; }
+  .egg-t { font-size: 17px; color: #7ee8e0; margin-bottom: 12px; }
+  .egg-b { width: 216px; height: 40px; border-radius: 20px; background-color: #3a2b45;
+           align-items: center; justify-content: center; margin-bottom: 8px; }
+  .egg-c { background-color: #2a2033; margin-top: 4px; }
+  .egg-bt { font-size: 17px; color: #ffffff; }
+</style>
+
+<script>
+import router from '@system.router'
+import prompt from '@system.prompt'
+import { wrapText, markCleared, saveSeen } from '../../common/reader.js'
+import { CGG } from '../../common/cglist.js'
+
+// 显示在副标题里的版本号。必须和 src/manifest.json 的 versionName 一致，
+// tools/build.js 的构建前检查会核对，不一致直接拒绝构建。
+const APP_VER = '2.2'
+
+// 每一行的字符数。字号 15、可用宽 308 → floor(308/15)=20，取 20 保证不折行。
+const CPL = 20
+
+// 关于页正文。's' = 小节标题，'p' = 正文，'g' = 空行。
+// 这里写的是原始段落，具体断行交给 common/reader.js 的 wrapText()，
+// 和正文页共用同一套逻辑。
+const ABOUT = [
+  ['s', '故事梗概'],
+  ['p', '在一个由「天选试」决定一切的世界里——'],
+  ['p', '国家每三年举办一次天选试，一次录取一千人，考核内容全部是美少女游戏（Galgame）。'],
+  ['p', '通过者握有制定规则、影响国运的权力。万般皆下品，惟有旮旯高。'],
+  ['g', ''],
+  ['p', '主角陈舟是个不折不扣的 Galgame 废萌党。比起上学，他更想打游戏。'],
+  ['g', ''],
+  ['p', '林曦是他的青梅竹马兼「好哥们」，比谁都温柔，却对 Galgame 既无兴趣也无才能。'],
+  ['g', ''],
+  ['p', '江晚晴永远一副尽在掌握的样子，在三人之间斡旋，一步步走向她要的结局。'],
+  ['g', ''],
+  ['p', '还有小涟——只有他能看见的纯白少女，与月光同在。'],
+  ['g', ''],
+  ['p', '在「现实的 Galgame」里，他要面对的不是攻略路线，而是一个必须做出选择的世界。'],
+  ['g', ''],
+  ['s', '结局'],
+  ['p', '真结局 · 这片月幕：登上天选台，拒绝「剧情作」的做法，全选，全都要——创造全员幸福的结局。'],
+  ['g', ''],
+  ['p', '结局 · 二人的世界：退出殿试，婉拒重职，与她们平和地告别。'],
+  ['g', ''],
+  ['p', '结局 · 回归日常：带着温暖的心情活下去，活在一个有你们的世界。'],
+  ['g', ''],
+  ['p', 'Bad End · 未能触碰的世界：省试落选，什么都无所谓了。'],
+  ['g', ''],
+  ['p', '后日谈 · 诺提拉：深夜，刚通关一部 Galgame 的玩家，在家里遇见了自称诺提拉的金瞳少女。'],
+  ['g', ''],
+  ['s', '版权信息'],
+  ['p', '本应用为非官方、非商业性的个人移植作品，与 AstroBox、小米（Xiaomi）均无关联，亦未获其授权或认可。'],
+  ['g', ''],
+  ['p', '剧本文字与全部美术资源（背景 / 立绘 / CG / 标题画）版权归原作 GalGod 及其开发方「诺提拉观察所」所有。'],
+  ['g', ''],
+  ['p', '素材仅用于学习与交流，请勿用于任何商业用途。如有侵权，请联系删除。'],
+  ['g', ''],
+  ['s', '开源协议'],
+  ['p', '本项目代码基于 MIT 协议开源，详见仓库根目录的 LICENSE 文件。'],
+  ['g', ''],
+  ['p', 'Copyright (c) 2026 The GalGod Band Project Contributors'],
+]
+
+export default {
+  // 统一用 protected，不要用 data（两者不能共存，运行时会抛错）
+  protected: {
+    rows: [],
+    ver: APP_VER,
+    dots: '',
+    eggOpen: false
+  },
+
+  onInit() {
+    this.tapCount = 0
+    this.lastTap = 0
+    this.lockTap = 0
+    this.build()
+  },
+
+  build() {
+    const rows = []
+    for (let i = 0; i < ABOUT.length; i++) {
+      const kind = ABOUT[i][0]
+      const txt = ABOUT[i][1]
+      if (kind === 'g') { rows.push({ c: 'r-g', t: '' }); continue }
+      const cls = kind === 's' ? 'r-s' : 'r-p'
+      const parts = wrapText(txt, CPL)
+      for (let j = 0; j < parts.length; j++) rows.push({ c: cls, t: parts[j] })
+    }
+    this.rows = rows
+  },
+
+  ban() {},
+  lock() { this.lockTap = Date.now() },
+
+  // ---- 彩蛋：2 秒内连点「关于」7 次
+  tapTitle() {
+    const now = Date.now()
+    if (now - this.lastTap > 2000) this.tapCount = 0
+    this.lastTap = now
+    this.tapCount++
+    if (this.tapCount >= 7) {
+      this.tapCount = 0
+      this.dots = ''
+      this.eggOpen = true
+      return
+    }
+    // 从第 4 次开始给一点点提示，不然完全看不出有反应
+    const DOTS = ['', '·', '··', '···']
+    this.dots = this.tapCount >= 4 ? DOTS[Math.min(3, this.tapCount - 3)] : ''
+  },
+
+  closeEgg() { this.lock(); this.eggOpen = false },
+
+  // 解锁后日谈：写 cleared 标记，章节选择里就会出现「后日谈 · 诺提拉」
+  unlockAfter() {
+    this.lock()
+    this.eggOpen = false
+    markCleared(() => {
+      prompt.showToast({ message: '已解锁「后日谈 · 诺提拉」' })
+    })
+  },
+
+  // 解锁全部 CG：把 cglist.js 里所有出现过的图片下标一次写进 cgSeen
+  unlockCg() {
+    this.lock()
+    this.eggOpen = false
+    const all = []
+    for (let i = 0; i < CGG.length; i++) {
+      const im = CGG[i].im || []
+      for (let j = 0; j < im.length; j++) {
+        if (all.indexOf(im[j]) < 0) all.push(im[j])
+      }
+    }
+    saveSeen(all, () => {
+      prompt.showToast({ message: '已解锁全部 CG（' + all.length + ' 张）' })
+    })
+  },
+
+  back() { this.lock(); router.back() }
+}
+</script>

@@ -21,15 +21,25 @@ const path = require('path');
 
 const proj = path.resolve(__dirname, '..');
 const ux = path.join(proj, 'src', 'pages', 'game', 'game.ux');
+const readerJs = path.join(proj, 'src', 'common', 'reader.js');
 
 function extract(src, name) {
   const re = new RegExp('\\n  ' + name + '\\([^)]*\\) \\{([\\s\\S]*?)\\n  \\},');
   const m = src.match(re);
-  if (!m) throw new Error('抠不出 ' + name + '()，检查 game.ux 的写法是否变了');
+  if (!m) throw new Error('抠不出 ' + name + '()，检查写法是否变了');
   return m[1];
 }
 
+// 从 reader.js 里抠出换行/分页函数（export function xxx(...) { ... }）
+function extractExport(src, name) {
+  const re = new RegExp('export function ' + name + '\\(([^)]*)\\) \\{([\\s\\S]*?)\\n\\}');
+  const m = src.match(re);
+  if (!m) throw new Error('reader.js 里抠不出 ' + name + '()');
+  return { args: m[1].split(',').map((s) => s.trim()).filter(Boolean), body: m[2] };
+}
+
 const src = fs.readFileSync(ux, 'utf8');
+const readerSrc = fs.readFileSync(readerJs, 'utf8');
 
 // ---- 从 game.ux 里抠出正文区几何常量
 const NAMES = ['PANEL_TOP', 'PANEL_H', 'NAME_TOP', 'TEXT_TOP',
@@ -46,20 +56,29 @@ if (!moreM) throw new Error('读不出 .more 的 top');
 geom.MORE_TOP = Number(moreM[1]);
 
 const layoutBody = extract(src, 'layout');
-const paginateBody = extract(src, 'paginate');
+
+// 真正的换行 + 分页算法在 reader.js，正文页和关于页共用
+const wrap = extractExport(readerSrc, 'wrapText');
+const pag = extractExport(readerSrc, 'paginateText');
+const BREAK = readerSrc.match(/const BREAK_AFTER = '([^']*)'/);
+if (!BREAK) throw new Error('reader.js 里找不到 BREAK_AFTER');
 
 // layout() 里用 this.settings，这里换成传入的参数
 const layoutFn = new Function(...NAMES, 'S', layoutBody.replace(/this\.settings/g, 'S'));
-// paginate() 第一行是 const L = this.layout()，去掉，改成由外部传入 L
-if (paginateBody.indexOf('const L = this.layout()') < 0) {
-  throw new Error('paginate() 里没找到 const L = this.layout()，抽取逻辑需要更新');
-}
-const paginateFn = new Function(...NAMES, 'L', 'text',
-  paginateBody.replace('const L = this.layout()', ''));
+
+// 把 reader.js 里的两个函数按原名拼出来再执行
+const fnSrc = (e, name) =>
+  'function ' + name + '(' + e.args.join(', ') + ') {' + e.body + '\n}';
+const pagFn = new Function(
+  'const BREAK_AFTER = ' + JSON.stringify(BREAK[1]) + ';\n' +
+  fnSrc(wrap, 'wrapText') + '\n' +
+  fnSrc(pag, 'paginateText') + '\n' +
+  'return paginateText;'
+)();
 
 const GV = NAMES.map((n) => geom[n]);
 const layout = (size) => layoutFn(...GV, { size });
-const paginate = (L, t) => paginateFn(...GV, L, t);
+const paginate = (L, t) => pagFn(t, L.cpl, L.lpp);
 
 // 顺带核对：CSS 里的底板/说话人位置和常量是否一致
 // 注意用惰性匹配 —— 贪心会取到最后一个 top:，加了 padding-top 之后就会读错
@@ -79,6 +98,30 @@ if (cssPanel !== geom.PANEL_TOP || cssPanelH !== geom.PANEL_H || cssName !== geo
 }
 console.log('几何常量与 CSS 一致 ✔  ' +
   NAMES.map((n) => n + '=' + geom[n]).join(' ') + ' MORE_TOP=' + geom.MORE_TOP);
+
+// ---- 关于页：它把每行字数写成常量 CPL，也要核对「CPL × 字号 ≤ 行宽」
+const aboutPath = path.join(proj, 'src', 'pages', 'about', 'about.ux');
+if (fs.existsSync(aboutPath)) {
+  const about = fs.readFileSync(aboutPath, 'utf8');
+  const cplM = about.match(/const CPL\s*=\s*(\d+)/);
+  const rpM = about.match(/\.r-p \{[^}]*?font-size:\s*(\d+)px[^}]*?width:\s*(\d+)px/);
+  const rpM2 = about.match(/\.r-p \{[^}]*?width:\s*(\d+)px[^}]*?font-size:\s*(\d+)px/);
+  const fontPx = rpM ? Number(rpM[1]) : (rpM2 ? Number(rpM2[2]) : null);
+  const lineW = rpM ? Number(rpM[2]) : (rpM2 ? Number(rpM2[1]) : null);
+  if (!cplM || !fontPx || !lineW) {
+    console.error('✖ 关于页读不出 CPL 或 .r-p 的 width/font-size');
+    process.exit(1);
+  }
+  const cpl = Number(cplM[1]);
+  const need = cpl * fontPx;
+  if (need > lineW) {
+    console.error('✖ 关于页每行字数超宽：CPL ' + cpl + ' × 字号 ' + fontPx +
+      ' = ' + need + 'px > .r-p 宽 ' + lineW + 'px');
+    process.exit(1);
+  }
+  console.log('关于页排版 ✔  CPL=' + cpl + ' × 字号 ' + fontPx + ' = ' + need +
+    'px ≤ 行宽 ' + lineW + 'px');
+}
 
 // ---------------------------------------------------------------- 载入剧本
 const storyDir = path.join(proj, 'src', 'common', 'story');

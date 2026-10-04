@@ -49,6 +49,40 @@ export function autoDelay(text, autoMs) {
   return Math.max(1200, Math.min(12000, Math.round(700 + n * autoMs)))
 }
 
+// ---------------------------------------------------------------- 换行与分页
+// 正文页和关于页共用这一套。之所以在运行时算而不是构建期切好，
+// 是因为设置里字号可以无级调节，切好的行会随字号变化而失效。
+// 断行优先落在标点之后，避免标点跑到行首。
+
+const BREAK_AFTER = '，。！？；：、）」』…—'
+
+export function wrapText(text, cpl) {
+  const lines = []
+  const raws = String(text || '').split('\n')
+  for (let i = 0; i < raws.length; i++) {
+    let s = raws[i]
+    if (s === '') { lines.push(''); continue }
+    while (s.length > cpl) {
+      let cut = cpl
+      const lo = Math.max(2, cpl - 8)
+      for (let k = cpl; k > lo; k--) {
+        if (BREAK_AFTER.indexOf(s.charAt(k - 1)) >= 0) { cut = k; break }
+      }
+      lines.push(s.slice(0, cut))
+      s = s.slice(cut)
+    }
+    lines.push(s)
+  }
+  return lines.length ? lines : ['']
+}
+
+export function paginateText(text, cpl, lpp) {
+  const lines = wrapText(text, cpl)
+  const pages = []
+  for (let i = 0; i < lines.length; i += lpp) pages.push(lines.slice(i, i + lpp))
+  return pages.length ? pages : [['']]
+}
+
 // ---------------------------------------------------------------- storage
 
 export function readJSON(key, fallback, done) {

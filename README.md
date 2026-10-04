@@ -10,8 +10,9 @@
 美术      136 张（背景 38 / 立绘 55 / CG 34 / 鉴赏缩略图 9）+ 标题画 + 图标
 分支      15 个选择点，3 条结局线 + 1 个 Bad End
 CG 鉴赏   9 组 / 32 张差分图，按原作 gallery.rpy 的分组与解锁条件
-页面      6 个：主页 / 正文 / 存档 / 章节 / CG 鉴赏 / 设置
-产物      dist/com.galgod.band.debug.2.1.rpk   4.76 MB
+页面      7 个：主页 / 正文 / 存档 / 章节 / CG 鉴赏 / 设置 / 关于
+协议      代码 MIT（见 LICENSE）；剧本与美术资源不在 MIT 范围内（见 NOTICE.md）
+产物      dist/com.galgod.band.debug.2.2.rpk   4.77 MB
 ```
 
 > **免责声明**：本项目是非官方的个人移植，仅供学习交流。
@@ -27,13 +28,15 @@ CG 鉴赏   9 组 / 32 张差分图，按原作 gallery.rpy 的分组与解锁�
 ```
 GalGod手环版/
 ├─ package.json              npm 脚本与 aiot-toolkit 依赖
+├─ LICENSE                   本项目**代码**的 MIT 协议
+├─ NOTICE.md                 素材版权说明（哪些内容不在 MIT 范围内）
 ├─ src/                      快应用源码（Vela 固定目录名）
 │  ├─ manifest.json          应用清单：包名/图标/路由/features/designWidth
 │  ├─ app.ux                 应用入口（本工程不用全局生命周期）
 │  ├─ common/
 │  │   ├─ assets.js          ← 生成：图片索引表（剧本里的资源号就是数组下标）
 │  │   ├─ cglist.js          ← 生成：CG 鉴赏分组与解锁条件
-│  │   ├─ reader.js          阅读器公共逻辑：设置项、storage 封装、自动播放时长
+│  │   ├─ reader.js          公共逻辑：设置项、storage 封装、换行与分页、自动播放时长
 │  │   ├─ home.png           标题画（由游戏 main_screen 转出）
 │  │   ├─ icon.png           应用图标
 │  │   ├─ img/b/*.png        ← 生成：背景 336×480
@@ -44,18 +47,19 @@ GalGod手环版/
 │  │       ├─ index.txt      ← 生成：章节表 + 分块表（内容是 JSON，用 .txt 扩展名）
 │  │       └─ chunk-000.txt… ← 生成：44 个分块，每块 128 个节点
 │  └─ pages/
-│      ├─ index/             主页：继续 / 开始 / 存档 / 章节 / CG / 设置 / 退出
+│      ├─ index/             主页：继续 / 开始 / 存档 / 章节 / CG / 设置 / 关于 / 退出
 │      ├─ game/              正文阅读器（引擎核心）
 │      ├─ saves/             存档 / 读档（6 个手动槽 + 自动存档）
 │      ├─ chapters/          章节选择（14 章正片，通关后多出后日谈）
 │      ├─ cg/                CG 鉴赏（9 组，含大图查看）
-│      └─ settings/          设置（字号 / 播放速度 / 自动播放 / 快速播放）
+│      ├─ settings/          设置（字号 / 播放速度 / 自动播放 / 快速播放）
+│      └─ about/             关于（故事梗概 / 版权信息 / 开源协议 + 彩蛋）
 └─ tools/
     ├─ gen_story.py          剧本编译器：Ren'Py .rpy → 分块节点 + 图片索引
     ├─ gen_assets.py         美术生成器：大图 → 手环尺寸 PNG
     ├─ validate_story.py     剧本校验：分块完整性、引用越界、全图可达
     ├─ simulate.py           剧情流程模拟器：把全部路线跑一遍
-    ├─ test_paginate.js      运行时分页测试：直接抽取 game.ux 的函数源码执行
+    ├─ test_paginate.js      排版测试：抽取 reader.js/game.ux 的函数原文执行
     ├─ preview_ui.py         用真实资源按 CSS 数值合成界面效果图
     ├─ build.js              构建前静态检查 + 构建包装 + rpk 内容校验
     ├─ export_repo.py        导出「可上传 GitHub 的精简目录」
@@ -76,7 +80,7 @@ GalGod手环版/
 
 ```bash
 npm install                    # 只有 aiot-toolkit 一个真正的依赖
-npm run build                  # → dist/com.galgod.band.debug.2.1.rpk
+npm run build                  # → dist/com.galgod.band.debug.2.2.rpk
 npm run start                  # 起模拟器预览（需要 AIoT-IDE/模拟器环境）
 ```
 
@@ -255,6 +259,40 @@ Ren'Py 里这两种写法含义不同，别搞混：
 > 参数页会把 slider change 事件里挖到的所有数字字段写到屏上并在 console 打印
 > `[GalGod] slider change: ...`，方便从固件日志确认事件结构。
 
+
+### 关于页与彩蛋
+
+主页第 5 个按钮进入**关于页**，内容是**故事梗概**（世界设定 / 主要角色 / 四种结局 / 后日谈）、
+**版权信息**与**开源协议**。
+
+关于页是一页可滚动的文本，用的是和正文页同一套换行逻辑
+（`common/reader.js` 的 `wrapText()`），只是字号固定 15px、每行 20 字：
+
+```
+.r-p { width: 308px; font-size: 15px; }   →  20 × 15 = 300px ≤ 308px
+```
+
+每行是一个 `<list-item>`，**三种行样式（正文 / 小节标题 / 空行）高度完全一致（25px）**，
+只改颜色——条目高度不一致是 `<list>` 上最容易出问题的地方。
+
+#### 彩蛋：连点「关于」7 次
+
+关于页顶部的「关于」两个字连点 **7 次**（2 秒内），弹出隐藏菜单：
+
+| 菜单项 | 作用 |
+|---|---|
+| 解锁 · 后日谈 | 写 `cleared` 标记，章节选择里立刻出现「后日谈 · 诺提拉」 |
+| 解锁 · 全部 CG | 把 `cglist.js` 里所有出现过的图片下标一次写进 `cgSeen`，CG 鉴赏 9 组全开 |
+| 关闭 | 收起菜单 |
+
+第 4 次点击起，标题右侧会出现 `·` `··` `···` 的计数提示——不然连点完全看不出有没有反应。
+
+两个解锁动作都是**直接复用正常游戏流程里那套 storage 键**，不是另开一条旁路：
+所以解锁后回到章节页 / CG 页看到的就是正常解锁的状态，重启也在。
+
+> 版本号在关于页的副标题里也显示了一份（`about.ux` 的 `APP_VER` 常量）。
+> 它是写死的字符串，很容易改了 `manifest.json` 忘了改它，
+> 所以 `tools/build.js` 的构建前检查会核对两者，不一致直接**拒绝构建**。
 
 ### 排版：分页搬到了运行时
 
@@ -481,7 +519,8 @@ readChunk(chunk, done) {
 | 剧本完整性 | `tools/validate_story.py` | 44 块覆盖 5569 节点无空洞；**全图可达 5569/5569**；无越界引用 |
 | 剧情流程 | `tools/simulate.py`（复刻 `game.ux` 的 `step()`/`onTap()` 语义跑真实数据） | 8 条策略全部正常收尾；**三条结局线 + Bad End 全部可达**；单周目不串结局 |
 | 工程可构建 | `npm run build` | 编译通过，rpk 4.76 MB，209 条目 / 138 PNG / 44 剧本块，**无 JPEG**（真机解码 JPEG 不可靠） |
-| 运行时分页 | `npm run test`（`tools/test_paginate.js`） | 把 `game.ux` 里 `layout()`/`paginate()` 的**源码原文**抠出来执行，字号 14~30 逐个跑全剧本 5457 句：不超行、不超页、不丢字、不压 `▼`；并核对几何常量与 CSS 一致 |
+| 运行时分页 | `npm run test`（`tools/test_paginate.js`） | 把 `reader.js` 的 `wrapText()`/`paginateText()` 与 `game.ux` 的 `layout()` **源码原文**抠出来执行，字号 14~30 逐个跑全剧本 5457 句：不超行、不超页、不丢字、不压 `▼`；并核对几何常量与 CSS 一致、关于页 `CPL × 字号 ≤ 行宽` |
+| 版本号一致性 | `tools/build.js` 的 `preflight()` | 核对 `about.ux` 的 `APP_VER` 与 `manifest.json` 的 `versionName`，不一致直接拒绝构建 |
 | 导出目录可独立构建 | 把 `galgod-band/` 复制出去单独 `npm run build` | 产出与主工程完全一致 |
 | 上传前自检 | `tools/check_encoding.py` | 全部文本文件合法 UTF-8、无误传文件、README 引用的图片都在 |
 | 语法 | webpack 编译 | `.ux` / `.js` 全部通过编译 |
@@ -525,18 +564,26 @@ readChunk(chunk, done) {
 - 想改章节标题：`tools/gen_story.py` 的 `CHAPTER_TITLES`
 - 想加/减 CG 鉴赏分组：`tools/gen_story.py` 的 `GALLERY`
 - 想改哪些章节不进「章节选择」：`tools/gen_story.py` 的 `CHAPTER_HIDE` / `CHAPTER_NEED_CLEAR`
+- 想改关于页内容：`src/pages/about/about.ux` 里的 `ABOUT` 数组（`s` = 小节标题、`p` = 正文、`g` = 空行）
+  和 `CPL`（每行字数）。改 `CPL` 或 `.r-p` 的字号后 `npm run test` 会核对「CPL × 字号 ≤ 行宽」
+- **改版本号要改两处**：`src/manifest.json` 的 `versionName`，
+  以及 `src/pages/about/about.ux` 的 `APP_VER`；不一致时构建会直接失败
 
 ---
 
-## 九、版权与免责
+## 九、版权与开源协议
 
 - **这是非官方的个人移植项目**，与 **GalGod** 原开发商“诺提拉观察所”、小米公司均无关联。
 - **剧本文字与美术资源**（背景、立绘、CG、标题画）版权归原作所有。
   `src/common/story/`、`src/common/img/`、`src/common/home.png`、`src/common/icon.png`
   都是从 PC 版游戏解包并转码而来的衍生文件——收录它们只是为了让仓库**能直接构建出可运行的包**。
   请勿用于商业用途；如版权方有异议，删除相应目录即可（代码本身不依赖具体内容，换个剧本照样能跑）。
-- **代码部分**（`src/pages/`、`src/common/reader.js`、`src/app.ux`、`tools/`）可自由参考、修改。
+- **代码部分采用 [MIT 协议](LICENSE)**：`src/pages/`、`src/common/reader.js`、`src/app.ux`、
+  `tools/`、`src/manifest.json` 以及全部文档，可自由使用、修改、再分发。
   架构思路来自 [galgaoshou-vela](https://github.com/qihe114514/galgaoshou-vela)。
+- ⚠️ **MIT 只覆盖代码，不覆盖素材。** 剧本文字与美术资源的版权不在本仓库手里，
+  也不能被本仓库以 MIT 再授权——详见 [NOTICE.md](NOTICE.md)。
+  换言之：拿代码去写自己的 galgame 完全没问题，但不能拿这批素材商用。
 - 侧载第三方应用到手表属于非官方途径，**风险自负**。
 - 如侵权，请联系本人删除该仓库和源码以及所有安装包，联系方式 a3436370081@163.com，本人看到后会立即删除
 

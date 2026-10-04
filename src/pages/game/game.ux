@@ -167,7 +167,7 @@ import prompt from '@system.prompt'
 import file from '@system.file'
 import { IMG } from '../../common/assets.js'
 import {
-  DEFAULT_SETTINGS, autoDelay, loadSettings, saveSettings,
+  DEFAULT_SETTINGS, autoDelay, loadSettings, saveSettings, paginateText,
   loadAutoSave, saveAutoSave, loadSeen, saveSeen, loadCleared, markCleared
 } from '../../common/reader.js'
 
@@ -699,31 +699,11 @@ export default {
     this.renderTyping(this.pageText.length)
   },
 
-  // 把一句原始台词按当前排版切成 页 -> 行
+  // 把一句原始台词按当前排版切成 页 -> 行。
+  // 真正的算法在 common/reader.js 的 paginateText()，和关于页共用同一份。
   paginate(text) {
     const L = this.layout()
-    const cpl = L.cpl
-    const lpp = L.lpp
-    const PUNCT = '，。！？；：、）」』…—'
-    const lines = []
-    const raws = String(text || '').split('\n')
-    for (let i = 0; i < raws.length; i++) {
-      let s = raws[i]
-      if (s === '') { lines.push(''); continue }
-      while (s.length > cpl) {
-        let cut = cpl
-        const lo = Math.max(2, cpl - 8)
-        for (let k = cpl; k > lo; k--) {
-          if (PUNCT.indexOf(s.charAt(k - 1)) >= 0) { cut = k; break }
-        }
-        lines.push(s.slice(0, cut))
-        s = s.slice(cut)
-      }
-      lines.push(s)
-    }
-    const pages = []
-    for (let i = 0; i < lines.length; i += lpp) pages.push(lines.slice(i, i + lpp))
-    return pages.length ? pages : [['']]
+    return paginateText(text, L.cpl, L.lpp)
   },
 
   // ---------------------------------------------------------------- 台词与打字机

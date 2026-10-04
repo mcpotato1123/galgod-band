@@ -1,0 +1,37 @@
+# 素材版权说明 / Assets Notice
+
+本仓库的 **MIT 协议只覆盖代码**。以下内容**不属于** MIT 协议的授权范围。
+
+## 不在 MIT 范围内的内容
+
+| 路径 | 内容 | 版权 |
+|---|---|---|
+| `src/common/story/` | 剧本文字（5,457 句台词） | 原作 GalGod 及其开发方 |
+| `src/common/img/b/` | 背景 38 张 | 同上 |
+| `src/common/img/s/` | 立绘 55 张 | 同上 |
+| `src/common/img/c/` | CG / SDCG 34 张 | 同上 |
+| `src/common/img/t/` | CG 鉴赏缩略图 9 张 | 同上（由上面裁切而来） |
+| `src/common/home.png` | 标题画 | 同上 |
+| `src/common/icon.png` | 应用图标 | 同上 |
+
+这些都是从 PC 版 **GalGod 1.0.0** 解包并转码而来的衍生文件，版权归原作
+**GalGod** 及其开发方「**诺提拉观察所**」所有。
+
+收录它们**只是为了让仓库能直接构建出可运行的包**——代码本身不依赖任何具体素材，
+换一套剧本和图片照样能跑。
+
+## 使用限制
+
+- 请勿用于任何商业用途。
+- 本项目为非官方、非商业性的个人移植作品，与 **AstroBox**、**小米（Xiaomi）**
+  均无关联，亦未获得其授权、赞助或认可。
+- 如版权方有异议，删除上表中列出的目录与文件即可；
+  此时仓库仍可通过 `tools/gen_story.py` / `tools/gen_assets.py`
+  从你自己的原始素材重新生成。
+- 如有侵权，请联系删除。
+
+## 在 MIT 范围内的内容
+
+`src/pages/`、`src/common/reader.js`、`src/common/assets.js`（生成物但属代码）、
+`src/common/cglist.js`（生成物但属代码）、`src/app.ux`、`src/manifest.json`、
+`tools/`、以及所有文档。详见 [LICENSE](LICENSE)。

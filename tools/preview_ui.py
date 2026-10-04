@@ -254,11 +254,11 @@ def main(raw, proj):
                             fill=(185, 80, 121, 255) if main else (50, 36, 58, 255))
         tw = d.textlength(txt, font=f_btn)
         d.text((50 + (236 - tw) / 2, y + 9), txt, font=f_btn, fill=(255, 255, 255))
-    for i, txt in enumerate(("存档", "章节", "CG", "设置")):
-        x = 50 + i * 61
-        d.rounded_rectangle([x, 372, x + 54, 412], radius=20, fill=(50, 36, 58, 255))
-        tw = d.textlength(txt, font=font(FONT, 17))
-        d.text((x + (54 - tw) / 2, 382), txt, font=font(FONT, 17), fill=(255, 255, 255))
+    for i, txt in enumerate(("存档", "章节", "CG", "设置", "关于")):
+        x = 50 + i * 47
+        d.rounded_rectangle([x, 372, x + 46, 412], radius=20, fill=(50, 36, 58, 255))
+        tw = d.textlength(txt, font=font(FONT, 16))
+        d.text((x + (46 - tw) / 2, 383), txt, font=font(FONT, 16), fill=(255, 255, 255))
     d.rounded_rectangle([50, 418, 286, 458], radius=20, fill=(36, 26, 43, 255))
     tw = d.textlength("退出", font=f_btn)
     d.text((50 + (236 - tw) / 2, 427), "退出", font=f_btn, fill=(255, 255, 255))
@@ -383,6 +383,59 @@ def main(raw, proj):
         ow = d.textlength(t, font=font(FONT, 18))
         d.text((x + (114 - ow) / 2, 440), t, font=font(FONT, 18), fill=(255, 255, 255))
     panels.append((c8, "⑧ 设置（滑块 + −／＋ 步进）"))
+
+    # 9. 关于（正文）
+    def about_base(with_dots):
+        c = Image.new("RGBA", (W, H), (20, 16, 26, 255))
+        dd = ImageDraw.Draw(c)
+        dd.text(((W - dd.textlength("关于", font=font(FONT, 22))) / 2, 4), "关于",
+                font=font(FONT, 22), fill=(255, 216, 230))
+        if with_dots:
+            dd.text((286, 10), "···", font=font(FONT, 15), fill=(255, 158, 196))
+        sub = "GalGod · 小米手环 9 Pro 版 · v2.2"
+        dd.text(((W - dd.textlength(sub, font=font(FONT, 12))) / 2, 36), sub,
+                font=font(FONT, 12), fill=(156, 143, 155))
+        rows = [
+            ("s", "故事梗概"),
+            ("p", "在一个由「天选试」决定一切的世界里——"),
+            ("p", "国家每三年举办一次天选试，一次录取"),
+            ("p", "一千人，考核内容全部是美少女游戏"),
+            ("p", "（Galgame）。"),
+            ("g", ""),
+            ("p", "主角陈舟是个不折不扣的 Galgame 废萌"),
+            ("p", "党。比起上学，他更想打游戏。"),
+            ("g", ""),
+            ("p", "林曦是他的青梅竹马兼「好哥们」，比谁"),
+            ("p", "都温柔，却对 Galgame 既无兴趣也无才能。"),
+            ("g", ""),
+            ("p", "还有小涟——只有他能看见的纯白少女，"),
+            ("p", "与月光同在。"),
+        ]
+        fr = font(FONT, 15)
+        for i, (k, t) in enumerate(rows):
+            col = (255, 179, 205) if k == "s" else (217, 205, 214)
+            dd.text((14, 58 + i * 25 + 5), t, font=fr, fill=col)
+        dd.rounded_rectangle([50, 432, 286, 472], radius=20, fill=(50, 36, 58, 255))
+        tw = dd.textlength("返回", font=f_btn)
+        dd.text(((W - tw) / 2, 441), "返回", font=f_btn, fill=(255, 255, 255))
+        return c
+
+    panels.append((about_base(False), "⑨ 关于（故事梗概 / 版权信息，可滚动）"))
+
+    # 10. 彩蛋菜单
+    c10 = about_base(True)
+    d = ImageDraw.Draw(c10)
+    d.rectangle([0, 0, W, H], fill=(8, 6, 10, 184))
+    d.rounded_rectangle([32, 132, 304, 344], radius=18, fill=(36, 28, 44, 255))
+    d.text((32 + (272 - d.textlength("？？？", font=font(FONT, 17))) / 2, 146),
+           "？？？", font=font(FONT, 17), fill=(126, 232, 224))
+    for i, t in enumerate(("解锁 · 后日谈", "解锁 · 全部 CG", "关闭")):
+        y = 175 + i * 48
+        d.rounded_rectangle([60, y, 276, y + 40], radius=20,
+                            fill=(42, 32, 51, 255) if i == 2 else (58, 43, 69, 255))
+        tw = d.textlength(t, font=font(FONT, 17))
+        d.text((60 + (216 - tw) / 2, y + 10), t, font=font(FONT, 17), fill=(255, 255, 255))
+    panels.append((c10, "⑩ 彩蛋：连点「关于」7 次"))
 
     # 拼图（标签放在每格上方的独立条里，避免压住界面）
     cols, gap, pad, lab = 3, 10, 16, 26

@@ -2,8 +2,8 @@
   "package": "com.galgod.band",
   "name": "GalGod",
   "icon": "/common/icon.png",
-  "versionName": "2.1",
-  "versionCode": 12,
+  "versionName": "2.2",
+  "versionCode": 13,
   "minPlatformVersion": 1100,
   "deviceTypeList": ["watch"],
   "features": [
@@ -24,7 +24,8 @@
       "pages/saves": { "component": "saves" },
       "pages/chapters": { "component": "chapters" },
       "pages/cg": { "component": "cg" },
-      "pages/settings": { "component": "settings" }
+      "pages/settings": { "component": "settings" },
+      "pages/about": { "component": "about" }
     }
   },
   "display": {

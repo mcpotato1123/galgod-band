@@ -16,10 +16,11 @@
       <div class="btn" if="{{hasAuto}}" onclick="resume" onswipe="ban"><text class="btn-t">继续阅读</text></div>
 
       <div class="row">
-        <div class="btn btn-quarter" onclick="openSaves" onswipe="ban"><text class="btn-t">存档</text></div>
-        <div class="btn btn-quarter" onclick="openChapters" onswipe="ban"><text class="btn-t">章节</text></div>
-        <div class="btn btn-quarter" onclick="openCg" onswipe="ban"><text class="btn-t">CG</text></div>
-        <div class="btn btn-quarter" onclick="openSettings" onswipe="ban"><text class="btn-t">设置</text></div>
+        <div class="btn btn-5" onclick="openSaves" onswipe="ban"><text class="btn-ts">存档</text></div>
+        <div class="btn btn-5" onclick="openChapters" onswipe="ban"><text class="btn-ts">章节</text></div>
+        <div class="btn btn-5" onclick="openCg" onswipe="ban"><text class="btn-ts">CG</text></div>
+        <div class="btn btn-5" onclick="openSettings" onswipe="ban"><text class="btn-ts">设置</text></div>
+        <div class="btn btn-5" onclick="openAbout" onswipe="ban"><text class="btn-ts">关于</text></div>
       </div>
       <div class="btn btn-quit" onclick="quit" onswipe="ban"><text class="btn-t">退出</text></div>
     </div>
@@ -48,10 +49,14 @@
   .btn-main { background-color: #b95079; }
   .btn-quit { background-color: #241a2b; }
   .btn-t { font-size: 19px; color: #ffffff; }
+  /* 5 个小按钮专用：236/5 ≈ 46px，字号 16 才放得下「设置」「关于」这种两字标签。
+     不能直接改 .btn-t，那样会连带把「开始阅读」等主按钮的字号也缩小。 */
+  .btn-ts { font-size: 16px; color: #ffffff; }
   .row { width: 236px; flex-direction: row; justify-content: space-between; }
   .btn-half { width: 114px; }
   .btn-third { width: 74px; }
   .btn-quarter { width: 54px; }
+  .btn-5 { width: 46px; }
 </style>
 
 <script>
@@ -87,6 +92,7 @@ export default {
   openChapters() { router.push({ uri: 'pages/chapters' }) },
   openCg() { router.push({ uri: 'pages/cg' }) },
   openSettings() { router.push({ uri: 'pages/settings' }) },
+  openAbout() { router.push({ uri: 'pages/about' }) },
   quit() { this.$app.exit() }
 }
 </script>

@@ -86,11 +86,27 @@ function preflight() {
   };
   walk(pagesDir);
 
+  // 关于页会在副标题里显示版本号，那个字符串是写死的常量，
+  // 很容易改了 manifest 忘了改它（页面上就会显示旧版本）。这里强制核对。
+  const manifestPath = path.join(proj, 'src', 'manifest.json');
+  const aboutPath = path.join(pagesDir, 'about', 'about.ux');
+  if (fs.existsSync(manifestPath) && fs.existsSync(aboutPath)) {
+    const ver = JSON.parse(fs.readFileSync(manifestPath, 'utf8')).versionName;
+    const a = fs.readFileSync(aboutPath, 'utf8').match(/const APP_VER\s*=\s*'([^']+)'/);
+    if (!a) {
+      warns.push('about.ux 里找不到 APP_VER 常量，无法核对版本号');
+    } else if (a[1] !== ver) {
+      problems.push('about.ux 的 APP_VER = ' + a[1] +
+        '，但 manifest.json 的 versionName = ' + ver +
+        '\n     → 关于页会显示错误的版本号，请把两者改成一致');
+    }
+  }
+
   for (const w of warns) console.log('⚠ ' + w);
   if (problems.length) {
     fail('构建前检查未通过：\n  ' + problems.join('\n  '));
   }
-  console.log('✔ 构建前检查通过（页面 VM 声明无冲突）\n');
+  console.log('✔ 构建前检查通过（页面 VM 声明无冲突、版本号一致）\n');
 }
 
 preflight();

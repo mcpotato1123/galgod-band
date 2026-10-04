@@ -14,6 +14,8 @@ SRC_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__
 # 顶层直接复制的内容
 FILES = [
     "README.md",
+    "LICENSE",
+    "NOTICE.md",
     "package.json",
     "package-lock.json",
 ]
