@@ -69,6 +69,14 @@ def check_markers(root):
         need(os.path.isfile(os.path.join(root, f)), f)
     lic = read(os.path.join(root, 'LICENSE')) or ''
     need('MIT License' in lic, 'LICENSE 是 MIT')
+    # GitHub 识别协议靠跟官方模板做相似度匹配：LICENSE 里只能有纯 MIT 文本。
+    # MIT 正文是纯 ASCII，所以「出现非 ASCII 字符」或「末尾不是 SOFTWARE.」
+    # 就说明有人往里加了说明性文字，会导致仓库页面上显示不出 MIT 标识。
+    extra = [c for c in lic if ord(c) > 127]
+    need(not extra, 'LICENSE 里没有非 ASCII 字符（GitHub 才能识别）')
+    need(lic.rstrip().endswith('SOFTWARE.'),
+         'LICENSE 以 SOFTWARE. 结尾（没有追加内容）')
+    need('---' not in lic, 'LICENSE 里没有分隔线')
 
     # 正文页几何（2.1 起的版面）
     g = read(os.path.join(root, 'src', 'pages', 'game', 'game.ux')) or ''
