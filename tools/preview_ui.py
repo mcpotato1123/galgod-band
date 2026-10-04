@@ -17,8 +17,11 @@ SP_W, SP_H = 143, 380
 SP_X = {"left": 10, "center": 96, "right": 182}
 SP_TOP = 100
 
-PANEL_TOP, PANEL_H = 312, 168
-LINE_TOP, LINE_STEP, LINE_LEFT, LINE_W = 350, 24, 14, 308
+# 与 game.ux 顶部的几何常量保持一致
+PANEL_TOP, PANEL_H = 330, 150
+NAME_TOP, NAME_LEFT = 292, 12
+LINE_TOP, LINE_STEP, LINE_LEFT, LINE_W = 338, 24, 10, 316
+MORE_AT = 462
 
 
 def font(path, size):
@@ -91,11 +94,16 @@ def draw_panel(canvas, f_name, f_body, speaker, lines, can_tap=True):
     d = ImageDraw.Draw(layer)
     d.rectangle([0, PANEL_TOP, W, H], fill=(18, 13, 19, 204))
     if speaker:
-        d.text((LINE_LEFT, 318), speaker, font=f_name, fill=(255, 216, 230))
+        # 说话人自带一块跟着文字宽度走的半透明底板（对应 .name 的 padding+background）
+        f_sp = font(FONT, 20)
+        tw = d.textlength(speaker, font=f_sp)
+        d.rounded_rectangle([NAME_LEFT, NAME_TOP, NAME_LEFT + tw + 20, NAME_TOP + 32],
+                            radius=9, fill=(16, 11, 18, 189))
+        d.text((NAME_LEFT + 10, NAME_TOP + 5), speaker, font=f_sp, fill=(255, 216, 230))
     for i, ln in enumerate(lines[:5]):
         d.text((LINE_LEFT, LINE_TOP + i * LINE_STEP), ln, font=f_body, fill=(255, 255, 255))
     if can_tap:
-        d.text((308, 456), "▼", font=font(FONT, 16), fill=(255, 158, 196))
+        d.text((308, MORE_AT), "▼", font=font(FONT, 16), fill=(255, 158, 196))
     canvas.alpha_composite(layer)
 
 

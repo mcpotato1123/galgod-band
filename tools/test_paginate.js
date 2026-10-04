@@ -5,11 +5,14 @@
  * 分页逻辑已经从构建期搬到 game.ux 的 layout()/paginate() —— 也就是说这段代码
  * 只会在手环上跑。这里把这两个函数的**源码原文**从 .ux 里抠出来直接执行，
  * 而不是另外抄一份，保证测的就是设备上跑的那份。
+ * 它们依赖的几何常量（TEXT_TOP / TEXT_BOX_H 等）也一并从 game.ux 里抠出来注入，
+ * 所以改了版面数值这个测试会跟着变，不会两边失配。
  *
- * 校验三件事（字号 14~30 全跑一遍）：
+ * 校验（字号 14~30 全跑一遍）：
  *   1. 没有一行超过当前字号下的每行字数
  *   2. 没有一页超过当前字号下的行数上限
  *   3. 所有页拼回去 == 原文（去掉换行），即没有丢字
+ *   4. 正文不会压到 .more 的「继续」提示
  *
  * 用法: node tools/test_paginate.js
  */
@@ -27,17 +30,55 @@ function extract(src, name) {
 }
 
 const src = fs.readFileSync(ux, 'utf8');
+
+// ---- 从 game.ux 里抠出正文区几何常量
+const NAMES = ['PANEL_TOP', 'PANEL_H', 'NAME_TOP', 'TEXT_TOP',
+               'TEXT_BOX_W', 'TEXT_PAD', 'TEXT_BOX_H', 'MAX_LINES'];
+const geom = {};
+for (const n of NAMES) {
+  const m = src.match(new RegExp('const ' + n + '\\s*=\\s*(\\d+)'));
+  if (!m) throw new Error('game.ux 里找不到常量 ' + n);
+  geom[n] = Number(m[1]);
+}
+// .more（继续提示）的位置也从 CSS 里读，避免测试和样式脱节
+const moreM = src.match(/\.more \{[^}]*top:\s*(\d+)px/);
+if (!moreM) throw new Error('读不出 .more 的 top');
+geom.MORE_TOP = Number(moreM[1]);
+
 const layoutBody = extract(src, 'layout');
 const paginateBody = extract(src, 'paginate');
 
 // layout() 里用 this.settings，这里换成传入的参数
-const layout = new Function('S', layoutBody.replace(/this\.settings/g, 'S'));
+const layoutFn = new Function(...NAMES, 'S', layoutBody.replace(/this\.settings/g, 'S'));
 // paginate() 第一行是 const L = this.layout()，去掉，改成由外部传入 L
 if (paginateBody.indexOf('const L = this.layout()') < 0) {
   throw new Error('paginate() 里没找到 const L = this.layout()，抽取逻辑需要更新');
 }
-const paginate = new Function('L', 'text',
+const paginateFn = new Function(...NAMES, 'L', 'text',
   paginateBody.replace('const L = this.layout()', ''));
+
+const GV = NAMES.map((n) => geom[n]);
+const layout = (size) => layoutFn(...GV, { size });
+const paginate = (L, t) => paginateFn(...GV, L, t);
+
+// 顺带核对：CSS 里的底板/说话人位置和常量是否一致
+// 注意用惰性匹配 —— 贪心会取到最后一个 top:，加了 padding-top 之后就会读错
+const cssNum = (cls, prop) => {
+  const m = src.match(new RegExp('\\.' + cls + ' \\{[^}]*?' + prop + ':\\s*(\\d+)px'));
+  return m ? Number(m[1]) : null;
+};
+const cssPanel = cssNum('panel', 'top');
+const cssPanelH = cssNum('panel', 'height');
+const cssName = cssNum('name', 'top');
+if (cssPanel !== geom.PANEL_TOP || cssPanelH !== geom.PANEL_H || cssName !== geom.NAME_TOP) {
+  console.error('✖ CSS 与 JS 常量不一致：' +
+    'CSS .panel top=' + cssPanel + ' height=' + cssPanelH + ' .name top=' + cssName +
+    ' / JS PANEL_TOP=' + geom.PANEL_TOP + ' PANEL_H=' + geom.PANEL_H +
+    ' NAME_TOP=' + geom.NAME_TOP);
+  process.exit(1);
+}
+console.log('几何常量与 CSS 一致 ✔  ' +
+  NAMES.map((n) => n + '=' + geom[n]).join(' ') + ' MORE_TOP=' + geom.MORE_TOP);
 
 // ---------------------------------------------------------------- 载入剧本
 const storyDir = path.join(proj, 'src', 'common', 'story');
@@ -56,10 +97,10 @@ console.log('剧本节点 ' + nodes.length + '，含台词 ' + texts.length + ' 
 
 // ---------------------------------------------------------------- 逐个字号检查
 let bad = 0;
-const rows = [];
 for (let size = 14; size <= 30; size++) {
-  const L = layout({ size: size });
-  let lines = 0, pages = 0, overLen = 0, overPage = 0, lost = 0, sample = null;
+  const L = layout(size);
+  let lines = 0, pages = 0, overLen = 0, overPage = 0, lost = 0, maxBottom = 0;
+  let sample = null;
 
   for (const t of texts) {
     const ps = paginate(L, t);
@@ -74,27 +115,28 @@ for (let size = 14; size <= 30; size++) {
       }
     }
     if (all !== t.replace(/\n/g, '')) { lost++; if (!sample) sample = t; }
+    const bottom = geom.TEXT_TOP + ps[0].length * L.lineH;
+    if (bottom > maxBottom) maxBottom = bottom;
   }
 
-  const ok = (overLen === 0 && overPage === 0 && lost === 0);
+  const overMore = maxBottom > geom.MORE_TOP;
+  const ok = (overLen === 0 && overPage === 0 && lost === 0 && !overMore);
   if (!ok) bad++;
-  rows.push({ size, cpl: L.cpl, lpp: L.lpp,
-    lines, pages, avg: (pages / texts.length).toFixed(2),
-    overLen, overPage, lost, ok, sample });
 
   console.log(
-    '  字号 ' + String(size).padStart(2) + '  每行' + String(L.cpl).padStart(2) + '字' +
+    '  字号 ' + String(size).padStart(2) +
+    '  每行' + String(L.cpl).padStart(2) + '字' +
     '  每页' + L.lpp + '行' +
     '  总行数 ' + String(lines).padStart(6) +
     '  总页数 ' + String(pages).padStart(6) +
-    '  页/句 ' + (pages / texts.length).toFixed(2) +
-    '  ' + (ok ? '✔' : ('✖ 超行首 ' + overLen + ' 超页 ' + overPage + ' 丢字 ' + lost)));
+    '  末行底 ' + String(maxBottom).padStart(3) +
+    '  ' + (ok ? '✔' : ('✖ 超行 ' + overLen + ' 超页 ' + overPage +
+                        ' 丢字 ' + lost + ' 压▼ ' + (overMore ? '是' : '否'))));
 }
 
 console.log('');
 if (bad) {
-  const s = rows.find((r) => !r.ok);
-  console.error('✖ ' + bad + ' 个字号有问题，例如 ' + s.size + 'px：' + JSON.stringify(s.sample));
+  console.error('✖ ' + bad + ' 个字号有问题');
   process.exit(1);
 }
-console.log('✔ 字号 14~30 全部通过：不超行、不超页、不丢字');
+console.log('✔ 字号 14~30 全部通过：不超行、不超页、不丢字、不压 ▼');

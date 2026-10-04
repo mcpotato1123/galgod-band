@@ -25,6 +25,10 @@ CHUNK_SIZE = 128
 # 分页由 src/pages/game/game.ux 在运行时按当前字号现算
 # （每行字数 = 正文框宽 / 字号），这样设置里的字号才能无级调节而不会折行。
 
+# 记录剧本里用字符串字面量当说话人的角色（"同学B" "台词" 这种写法），
+# 供 build() 末尾做「说话人没被拼进正文」的自检
+STRING_SPEAKERS = {}
+
 SPEAKER_NAMES = {
     "cz": "陈舟", "me": "我", "zhengke": "政客",
     "lx": "林曦", "jwq": "江晚晴", "xl": "小涟", "xl_l": "小涟",
@@ -234,10 +238,22 @@ def parse_one(s, ln):
     if s.startswith('"'):
         text, j = parse_quoted(s, 0)
         rest = s[j:].strip()
-        while rest.startswith('"'):
-            more, j2 = parse_quoted(rest, 0)
-            text += more
-            rest = rest[j2:].strip()
+        # Ren'Py 里 `"名字" "台词"` 是「匿名角色说话」，**不是**相邻字符串拼接。
+        # 全剧本核对过：这种写法共 61 行，第一个字符串最长 5 个字，取值只有
+        # 班主任(22) / 同学A(17) / 同学B(10) / ???(9) / 远处的声音(2) / 众人(1)，
+        # 没有任何一行是真的旁白拼接，所以这里可以安全地把第一段当说话人。
+        if rest.startswith('"'):
+            name = clean_text(text)
+            STRING_SPEAKERS[name] = STRING_SPEAKERS.get(name, 0) + 1
+            text, j = parse_quoted(rest, 0)
+            rest = rest[j:].strip()
+            while rest.startswith('"'):
+                more, j2 = parse_quoted(rest, 0)
+                text += more
+                rest = rest[j2:].strip()
+            if rest and not rest.startswith(("with", "nointeract", "id")):
+                w.append("旁白尾部: " + s)
+            return ("say", name, clean_text(text)), w
         if rest and not rest.startswith(("with", "nointeract", "id")):
             w.append("旁白尾部: " + s)
         return ("say", "", clean_text(text)), w
@@ -775,6 +791,21 @@ def build(raw_dir, out_dir):
         WARNINGS.append("CG 鉴赏里有未收录的图: " + ", ".join(sorted(set(miss))))
 
     # ---------------------------------------------------------- 报告
+    # 自检：字符串字面量说话人（"同学B" "台词"）绝对不能被拼进正文。
+    # 这个 bug 是静默的——正文里多出「同学B」三个字，编译不会报任何错，
+    # 只有在手环上看到才发现。所以这里硬性拦一道。
+    leaked = []
+    for n in c.out:
+        if n.get("t") != "s":
+            continue
+        x = n.get("x") or ""
+        for nm in STRING_SPEAKERS:
+            if x.startswith(nm):
+                leaked.append("%s -> %s" % (nm, x[:30]))
+    if leaked:
+        WARNINGS.append("说话人被拼进正文 %d 处: %s"
+                        % (len(leaked), "; ".join(sorted(set(leaked))[:4])))
+
     stat = {}
     for n in c.out:
         stat[n["t"]] = stat.get(n["t"], 0) + 1
@@ -782,6 +813,10 @@ def build(raw_dir, out_dir):
     print("分块     : %d 块 (%d/块)" % (len(chunks), CHUNK_SIZE))
     print("章节     : %d" % len(c.chapters))
     print("节点类型 : %s" % stat)
+    if STRING_SPEAKERS:
+        print("字符串说话人 : %s"
+              % ", ".join("%s(%d)" % (k, v) for k, v in
+                          sorted(STRING_SPEAKERS.items(), key=lambda x: -x[1])))
     kinds = {}
     for it in IMG_LIST:
         kinds[it["kind"]] = kinds.get(it["kind"], 0) + 1

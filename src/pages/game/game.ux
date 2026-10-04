@@ -112,20 +112,27 @@
               background-color: rgba(27, 21, 32, 0.82); align-items: center; justify-content: center; }
   .menu-ico { font-size: 24px; color: #ffd8e6; }
 
-  .panel { position: absolute; top: 312px; left: 0px; width: 336px; height: 168px;
+  /* 底板 330..480。说话人单独浮在底板上方（298），不再贴着底板边缘。
+     两种底板用同一套几何：只改透明度，避免看 CG 时底板下移、说话人半悬在边缘上。 */
+  .panel { position: absolute; top: 330px; left: 0px; width: 336px; height: 150px;
            background-color: rgba(18, 13, 19, 0.80); }
   /* 看 CG 时用更透的底板，把画面尽量露出来 */
-  .panel-cg { position: absolute; top: 333px; left: 0px; width: 336px; height: 147px;
+  .panel-cg { position: absolute; top: 330px; left: 0px; width: 336px; height: 150px;
               background-color: rgba(10, 8, 12, 0.58); }
 
-  .name { position: absolute; top: 320px; left: 14px; font-size: 22px; color: #ffd8e6; font-weight: bold; }
+  /* 说话人：自带一块跟着文字宽度走的半透明底板（靠 text 的 padding+background 实现，
+     不需要固定宽度），浮在底板上方，不再贴着底板上沿，也不会被亮色画面糊掉 */
+  .name { position: absolute; top: 292px; left: 12px; font-size: 20px; color: #ffd8e6;
+          font-weight: bold; background-color: rgba(16, 11, 18, 0.74);
+          padding-left: 10px; padding-right: 10px; padding-top: 4px; padding-bottom: 4px;
+          border-radius: 9px; text-shadow: 0px 1px 3px rgba(0, 0, 0, 0.9); }
 
   /* 正文行：位置/字号/行高都在 s0..s5 里动态给出，见 applyFont()。
-     正文区 316×124，运行时按当前字号算每行字数与行数，所以不会折行。 */
+     正文区 316×134，运行时按当前字号算每行字数与行数，所以不会折行。 */
   .ln { position: absolute; left: 10px; width: 316px; color: #ffffff;
         font-size: 20px; line-height: 24px; lines: 1; }
 
-  .more { position: absolute; top: 456px; left: 308px; font-size: 16px; color: #ff9ec4; }
+  .more { position: absolute; top: 462px; left: 308px; font-size: 16px; color: #ff9ec4; }
 
   .badge { position: absolute; top: 44px; left: 12px; width: 312px; font-size: 15px; line-height: 20px;
            color: #ffd166; lines: 3; }
@@ -166,6 +173,19 @@ import {
 
 const SAVE_MAGIC = 'galgod-band-1'
 const TAG = '[GalGod] '
+
+// ---------------------------------------------------------------- 正文区几何
+// 这些数值必须和 CSS 里的 .panel / .panel-cg / .name / .ln 保持一致。
+// 放在这里是为了只有一处定义，改版面时不会 CSS 和 JS 各改一半导致错位。
+const PANEL_TOP = 330     // 对话底板的上沿
+const PANEL_H = 150       // 底板高度
+const NAME_TOP = 292      // 说话人底板的上沿：浮在底板上方（330），不贴着底板上沿
+const TEXT_TOP = 338      // 正文第一行的 y
+const TEXT_BOX_W = 316    // .ln 的元素宽度
+const TEXT_PAD = 6        // 每行右侧留的余量（算每行字数用）
+const TEXT_BOX_H = 122    // 正文区高度：取 122 是为了让最后一行（最长情况 458）
+                          // 停在下方的 ▼ 继续提示（462）之上，不压到一起
+const MAX_LINES = 6       // .ln 的槽位数量，必须 >= 字号 14 时的行数
 const AUTO_DEFAULT = 90    // 从菜单打开自动播放时给的默认停留（毫秒/字）
 
 export default {
@@ -638,14 +658,13 @@ export default {
   },
 
   // ---------------------------------------------------------------- 排版与分页
-  // 正文区（与 .ln 保持一致）
-  //   宽 316 - 6 余量、高 124，每行行距 = 字号 + 4
+  // 正文区宽 TEXT_BOX_W - TEXT_PAD、高 TEXT_BOX_H、从 TEXT_TOP 开始，行距 = 字号 + 4。
   // 分页完全在运行时按当前字号现算，所以字号可以无级调节而不会折行。
   layout() {
     const size = (this.settings && this.settings.size) || 20
     const lineH = size + 4
-    const cpl = Math.max(4, Math.floor(310 / size))
-    const lpp = Math.max(1, Math.min(6, Math.floor(124 / lineH)))
+    const cpl = Math.max(4, Math.floor((TEXT_BOX_W - TEXT_PAD) / size))
+    const lpp = Math.max(1, Math.min(MAX_LINES, Math.floor(TEXT_BOX_H / lineH)))
     return { size: size, lineH: lineH, cpl: cpl, lpp: lpp }
   },
 
@@ -661,7 +680,7 @@ export default {
   },
 
   lineStyle(i, L) {
-    return 'top: ' + (348 + i * L.lineH) + 'px; font-size: ' + L.size +
+    return 'top: ' + (TEXT_TOP + i * L.lineH) + 'px; font-size: ' + L.size +
       'px; line-height: ' + L.lineH + 'px;'
   },
 
