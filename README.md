@@ -726,6 +726,13 @@ readChunk(chunk, done) {
   **`npm run test` 会核对这几处，并断言 `.bgwide` 上没有出现 `transition`/`animation`**
 - 想改 CG 全图的取景宽度：改 `tools/gen_assets.py` 的 **`CG_W`**，
   同步改 `src/pages/cg/cg.ux` 顶部的 `CG_W`（`npm run test` 会核对）
+- 想改主页画 / 应用图标：两者都在 `tools/gen_assets.py` 里生成，
+  **不要在 `src/common/` 下手改** —— 重跑生成脚本会把改动覆盖掉
+  （踩过一次：手换的应用图标被脚本重新生成回了旧图）
+  - 主页画：原图按 3:2 居中裁切的那张构图（logo 在左、女孩在右），
+    按**宽度**铺满 336，余下的高度用渐变收进底色。
+    按宽度而不是 `cover`：`cover` 会裁掉两侧、把 logo 切掉
+  - 应用图标：从原图裁女孩的脸（`side` / `cx` / `cy` 控制取景）+ 圆角
 - 想改章节标题：`tools/gen_story.py` 的 `CHAPTER_TITLES`
 - 想加/减 CG 鉴赏分组：`tools/gen_story.py` 的 `GALLERY`
 - 想改哪些章节不进「章节选择」：`tools/gen_story.py` 的 `CHAPTER_HIDE` / `CHAPTER_NEED_CLEAR`
