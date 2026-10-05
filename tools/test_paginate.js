@@ -99,45 +99,108 @@ if (cssPanel !== geom.PANEL_TOP || cssPanelH !== geom.PANEL_H || cssName !== geo
 console.log('几何常量与 CSS 一致 ✔  ' +
   NAMES.map((n) => n + '=' + geom[n]).join(' ') + ' MORE_TOP=' + geom.MORE_TOP);
 
-// ---- 全景背景：这是一个跨三个文件的三元约束，特别容易改一半
-//      gen_assets.py 的 BG_W  −  屏幕宽  ==  game.ux 的 PAN_RANGE  ==  CSS .bgw 的 width
+// ---- 全景背景 / CG 全图：几处跨文件约束，特别容易只改一半
 const genAssets = path.join(proj, 'tools', 'gen_assets.py');
 if (fs.existsSync(genAssets)) {
   const ga = fs.readFileSync(genAssets, 'utf8');
-  const mBgw = ga.match(/^BG_W\s*=\s*(\d+)/m);
-  const mScr = ga.match(/^SCREEN_W,\s*SCREEN_H\s*=\s*(\d+),\s*(\d+)/m);
-  const mPan = src.match(/const PAN_RANGE\s*=\s*(\d+)/);
-  const cssBgw = src.match(/\.bgw \{[^}]*?width:\s*(\d+)px/);
-  if (!mBgw || !mScr || !mPan || !cssBgw) {
-    console.error('✖ 读不全全景背景的参数：' +
-      'gen_assets.BG_W=' + (mBgw && mBgw[1]) +
-      ' SCREEN_W=' + (mScr && mScr[1]) +
-      ' game.ux PAN_RANGE=' + (mPan && mPan[1]) +
-      ' CSS .bgw width=' + (cssBgw && cssBgw[1]));
-    process.exit(1);
-  }
-  const bgw = Number(mBgw[1]);
-  const scr = Number(mScr[1]);
-  const pan = Number(mPan[1]);
-  const cssW = Number(cssBgw[1]);
+  const num = (re, src) => { const m = src.match(re); return m ? Number(m[1]) : null; };
   const bad = [];
-  if (bgw - scr !== pan) bad.push('BG_W(' + bgw + ') - 屏幕宽(' + scr +
-    ') = ' + (bgw - scr) + ' ≠ PAN_RANGE(' + pan + ')');
-  if (cssW !== bgw) bad.push('CSS .bgw width(' + cssW + ') ≠ BG_W(' + bgw + ')');
-  if (pan <= 0) bad.push('PAN_RANGE 必须为正，否则背景不会动');
+
+  const scrW = num(/^SCREEN_W,\s*SCREEN_H\s*=\s*(\d+)/m, ga);
+  const scrH = num(/^SCREEN_W,\s*SCREEN_H\s*=\s*\d+,\s*(\d+)/m, ga);
+  const bgTiles = num(/^BG_TILES\s*=\s*(\d+)/m, ga);
+  const cgW = num(/^CG_W\s*=\s*(\d+)/m, ga);
+  const gameTileCount = num(/const BG_TILE_COUNT\s*=\s*(\d+)/, src);
+
+  if (scrW === null || scrH === null || bgTiles === null || cgW === null) {
+    console.error('✖ gen_assets.py 里读不到 SCREEN_W / SCREEN_H / BG_TILES / CG_W');
+    process.exit(1);
+  }
+  if (gameTileCount !== bgTiles) {
+    bad.push('gen_assets.BG_TILES(' + bgTiles + ') ≠ game.ux 的 BG_TILE_COUNT(' +
+      gameTileCount + ')：素材会多切或少切，运行时拼不出完整背景');
+  }
+  if (cgW <= scrW) {
+    bad.push('CG_W(' + cgW + ') 必须大于屏幕宽(' + scrW + ')，否则横向滚动没有内容可看');
+  }
+
+  // game.ux 里 swiper 与幻灯片的尺寸
+  const bgswW = num(/\.bgsw \{[^}]*?width:\s*(\d+)px/, src);
+  const bgswH = num(/\.bgsw \{[^}]*?height:\s*(\d+)px/, src);
+  const slideW = num(/\.bgslide \{[^}]*?width:\s*(\d+)px/, src);
+  const slideH = num(/\.bgslide \{[^}]*?height:\s*(\d+)px/, src);
+  if (bgswW !== scrW || bgswH !== scrH) {
+    bad.push('CSS .bgsw(' + bgswW + 'x' + bgswH + ') ≠ 屏幕(' + scrW + 'x' + scrH + ')');
+  }
+  if (slideW !== scrW || slideH !== scrH) {
+    bad.push('CSS .bgslide(' + slideW + 'x' + slideH + ') ≠ 屏幕(' + scrW + 'x' + scrH +
+      ')：幻灯片是预切好的整屏图，尺寸必须一致');
+  }
+
+  // cg.ux 里那张全图 CG 的宽度
+  const cgPath = path.join(proj, 'src', 'pages', 'cg', 'cg.ux');
+  if (fs.existsSync(cgPath)) {
+    const cgSrc = fs.readFileSync(cgPath, 'utf8');
+    const bigW = num(/\.big \{[^}]*?width:\s*(\d+)px/, cgSrc);
+    const bigH = num(/\.big \{[^}]*?height:\s*(\d+)px/, cgSrc);
+    if (bigW !== cgW) {
+      bad.push('cg.ux 的 .big width(' + bigW + ') ≠ gen_assets.CG_W(' + cgW +
+        ')：图会被拉伸或裁掉');
+    }
+    if (bigH !== scrH) {
+      bad.push('cg.ux 的 .big height(' + bigH + ') ≠ 屏幕高(' + scrH + ')');
+    }
+    if (!/scroll-direction="horizontal"/.test(cgSrc)) {
+      bad.push('cg.ux 的滚动容器不是横向的（缺 scroll-direction="horizontal"），拖动将看不了全图');
+    }
+  }
+
   if (bad.length) {
-    console.error('✖ 全景背景参数不一致：\n    ' + bad.join('\n    '));
+    console.error('✖ 全景背景 / CG 全图 参数不一致：\n    ' + bad.join('\n    '));
     process.exit(1);
   }
-  const mPanMs = src.match(/const PAN_MS\s*=\s*(\d+)/);
-  const cssDur = src.match(/\.bgw \{[^}]*?transition-duration:\s*(\d+)ms/);
-  if (mPanMs && cssDur && Number(mPanMs[1]) !== Number(cssDur[1])) {
-    console.error('✖ 平移时长不一致：PAN_MS=' + mPanMs[1] +
-      ' 但 CSS transition-duration=' + cssDur[1] + 'ms');
-    process.exit(1);
+  console.log('全景背景 ✔  BG_TILES=' + bgTiles + ' 图块 ' + scrW + 'x' + scrH +
+    '；CG 全图 ✔ ' + cgW + 'x' + scrH + ' 横向滚动');
+
+  // 背景第 2..N 块是靠 <name>_r.png 后缀推出来的（运行时不查表，纯字符串拼接），
+  // 所以「背景名本身不能以 _r / _r2 … 结尾」，否则派生名会撞上别的背景。
+  const assetsPath = path.join(proj, 'src', 'common', 'assets.js');
+  if (fs.existsSync(assetsPath)) {
+    const ap = fs.readFileSync(assetsPath, 'utf8');
+    const bgs = (ap.match(/"[^"]*\/b\/[^"]+"/g) || []).map((x) => x.slice(1, -1));
+    const names = bgs.map((p) => path.basename(p).replace(/\.[^.]+$/, ''));
+    const clash = [];
+    for (let t = 1; t < bgTiles; t++) {
+      const suffix = t === 1 ? '_r' : ('_r' + t);
+      for (const n of names) {
+        if (n.endsWith(suffix)) clash.push(n + ' 以 ' + suffix + ' 结尾');
+      }
+    }
+    if (clash.length) {
+      console.error('✖ 背景名与派生后缀冲突（会让第 2..N 块覆盖别的背景）：\n    ' +
+        clash.join('\n    '));
+      process.exit(1);
+    }
+    // 派生出来的文件必须真的存在
+    const cssDir = path.join(proj, 'src', 'common');
+    const missing = [];
+    for (const p of bgs) {
+      for (let t = 1; t < bgTiles; t++) {
+        const suffix = t === 1 ? '_r' : ('_r' + t);
+        const f = path.join(cssDir, p.replace('/common/', '').replace(/\.[^.]+$/, '')
+          .split('/').join(path.sep) + suffix + path.extname(p));
+        if (!fs.existsSync(f)) missing.push(path.basename(f));
+      }
+    }
+    if (missing.length) {
+      console.error('✖ 背景第 2..N 块缺失（运行时会出现空白背景）：\n    ' +
+        missing.slice(0, 8).join('\n    ') +
+        (missing.length > 8 ? '\n    ...共 ' + missing.length + ' 个' : ''));
+      process.exit(1);
+    }
+    console.log('背景图块 ✔  ' + bgs.length + ' 个背景 × ' + bgTiles +
+      ' 块，全部存在且无重名');
   }
-  console.log('全景背景参数 ✔  BG_W=' + bgw + ' 屏幕宽=' + scr +
-    ' 平移 ' + pan + 'px  单程 ' + (mPanMs ? mPanMs[1] : '?') + 'ms');
 }
 
 // ---- 关于页：它把每行字数写成常量 CPL，也要核对「CPL × 字号 ≤ 行宽」

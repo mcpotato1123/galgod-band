@@ -18,12 +18,14 @@
 
     <div class="back" onclick="back" onswipe="ban"><text class="btn-t">返回</text></div>
 
-    <!-- 大图查看：横向滑动切换差分图（原来靠 ‹ › 两个按钮，手环上点着累） -->
+    <!-- 大图查看
+         CG 素材是完整 16:9（854×480），比屏幕宽得多，所以放进横向 scrollview，
+         **左右拖动就能看到被裁掉的两侧**。
+         同一组的差分图用下面的 ‹ › 切换 —— 拖动是留给"看全图"的，不抢这个手势。 -->
     <div class="viewer" if="{{viewing}}">
-      <swiper class="sw" index="{{swIndex}}" loop="true" indicator="false"
-              duration="240" onchange="onSwipe" onswipe="ban">
-        <image class="big" for="{{vlist}}" tid="v" src="{{$item}}" onswipe="ban"></image>
-      </swiper>
+      <scrollview class="sv" scroll-direction="horizontal" show-scrollbar="false">
+        <image class="big" src="{{bigSrc}}"></image>
+      </scrollview>
 
       <div class="vtop">
         <text class="vname">{{vName}}</text>
@@ -31,7 +33,13 @@
       </div>
 
       <div class="vclose" onclick="closeView" onswipe="ban"><text class="vclose-t">关闭</text></div>
-      <text class="vhint" if="{{pageAll > 1}}">← 左右滑动切换 →</text>
+
+      <div class="vbar" if="{{pageAll > 1}}">
+        <div class="vbtn" onclick="prev" onswipe="ban"><text class="vbtn-t">‹</text></div>
+        <text class="vhint">拖动看全图</text>
+        <div class="vbtn" onclick="next" onswipe="ban"><text class="vbtn-t">›</text></div>
+      </div>
+      <text class="vhint2" if="{{pageAll <= 1}}">← 左右拖动看全图 →</text>
     </div>
   </div>
 </template>
@@ -63,11 +71,11 @@
 
   .viewer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
             background-color: #000000; }
-  /* swiper 必须显式给宽高（和 list 一样），不然铺不开 */
-  .sw { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; }
-  .big { width: 336px; height: 480px; object-fit: cover; }
+  /* 横向滚动容器：显式给宽高，里面那张图比它宽，多出来的部分靠拖动看 */
+  .sv { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; }
+  /* CG_W 必须等于 tools/gen_assets.py 的 CG_W，npm run test 会核对 */
+  .big { width: 854px; height: 480px; }
 
-  /* 顶部：组名 + 第几张 */
   .vtop { position: absolute; top: 10px; left: 0px; width: 336px; flex-direction: row;
           align-items: center; padding-left: 14px; padding-right: 86px; }
   .vname { font-size: 16px; color: #ffe6ef; lines: 1; }
@@ -78,8 +86,16 @@
             align-items: center; justify-content: center; }
   .vclose-t { font-size: 17px; color: #ffe6ef; }
 
-  .vhint { position: absolute; top: 442px; left: 0px; width: 336px; text-align: center;
-           font-size: 14px; color: rgba(226, 214, 224, 0.72); }
+  .vbar { position: absolute; top: 430px; left: 22px; width: 292px; height: 42px;
+          border-radius: 21px; background-color: rgba(0, 0, 0, 0.62);
+          flex-direction: row; align-items: center; justify-content: space-between;
+          padding-left: 6px; padding-right: 6px; }
+  .vbtn { width: 46px; height: 34px; border-radius: 17px; background-color: #32243a;
+          align-items: center; justify-content: center; }
+  .vbtn-t { font-size: 22px; color: #ffffff; }
+  .vhint { font-size: 14px; color: rgba(226, 214, 224, 0.8); }
+  .vhint2 { position: absolute; top: 440px; left: 0px; width: 336px; text-align: center;
+            font-size: 14px; color: rgba(226, 214, 224, 0.72); }
 </style>
 
 <script>
@@ -89,16 +105,6 @@ import { CGG } from '../../common/cglist.js'
 import { IMG } from '../../common/assets.js'
 import { loadSeen } from '../../common/reader.js'
 
-// swiper 的 change 事件在不同版本里可能给 evt.index / evt.detail.index / evt.target.index
-function readIndex(e) {
-  if (e === null || e === undefined) return null
-  if (typeof e === 'number') return e
-  if (typeof e.index === 'number') return e.index
-  if (e.detail && typeof e.detail.index === 'number') return e.detail.index
-  if (e.target && typeof e.target.index === 'number') return e.target.index
-  return null
-}
-
 export default {
   // 统一用 protected，不要用 data（两者不能共存，运行时会抛错）
   protected: {
@@ -106,9 +112,8 @@ export default {
     openCount: 0,
     total: 0,
     viewing: false,
-    vlist: [],
+    bigSrc: '',
     vName: '',
-    swIndex: 0,
     pageNo: 1,
     pageAll: 1
   },
@@ -157,28 +162,39 @@ export default {
     }
     this.curGroup = i
     this.curPage = 0
-    // 整组一次性铺进 swiper，滑动就是原生翻页，不再靠按钮切图
-    const list = []
-    for (let k = 0; k < g.im.length; k++) list.push(IMG[g.im[k]] || '')
-    this.vlist = list
     this.vName = g.n
-    this.swIndex = 0
-    this.pageNo = 1
     this.pageAll = g.im.length
+    this.showPage()
     this.viewing = true
   },
 
-  onSwipe(e) {
-    const i = readIndex(e)
-    if (i === null || i < 0 || i >= this.pageAll) return
-    this.curPage = i
-    this.pageNo = i + 1
+  showPage() {
+    const g = this.groups[this.curGroup]
+    if (!g) return
+    this.bigSrc = IMG[g.im[this.curPage]] || ''
+    this.pageNo = this.curPage + 1
+  },
+
+  prev() {
+    this.lock()
+    const g = this.groups[this.curGroup]
+    if (!g) return
+    this.curPage = (this.curPage - 1 + g.im.length) % g.im.length
+    this.showPage()
+  },
+
+  next() {
+    this.lock()
+    const g = this.groups[this.curGroup]
+    if (!g) return
+    this.curPage = (this.curPage + 1) % g.im.length
+    this.showPage()
   },
 
   closeView() {
     this.lock()
     this.viewing = false
-    this.vlist = []
+    this.bigSrc = ''
     this.vName = ''
   },
 

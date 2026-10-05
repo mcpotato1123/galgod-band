@@ -24,18 +24,28 @@ from PIL import Image, ImageDraw, ImageFont
 # 画布与运行时组件尺寸（与 src/pages/game/game.ux 的 CSS 保持一致）
 SCREEN_W, SCREEN_H = 336, 480
 
-# 背景生成成「宽幅」，运行时在 game.ux 里用 CSS transition 缓慢左右平移做全景效果，
-# 而不是死死裁成一块 336×480。
-#   BG_W = 336  → 不平移（回到老行为）
-#   BG_W = 504  → 可平移 168px（默认，1.5 屏宽）
-#   BG_W = 672  → 可平移 336px，画面更宽，但背景体积接近翻倍
-# 平移距离 = BG_W - SCREEN_W，必须和 game.ux 的 PAN_RANGE 一致。
-BG_W = 504
+# ---- 背景：自动全景
+# 不再输出一张宽图让运行时自己平移（试过，真机上出接缝），
+# 而是把宽幅画面**预切成整屏大小的图块**，运行时用 <swiper autoplay> 轮播。
+# 裁切与动画全部交给 swiper 组件，代码里不做任何 overflow 或 left 补间。
+#
+#   BG_TILES = 1  → 不平移（等于老行为，只出一张）
+#   BG_TILES = 2  → 两个位置，来回扫 336px（当前）
+#   BG_TILES = 3  → 三个位置，来回扫 672px，背景体积再涨 50%
+# 取景宽度 = SCREEN_W * BG_TILES。game.ux 的幻灯片列表必须与这里一致。
+BG_TILES = 2
+
+# ---- CG：滑动看全图
+# 出成完整 16:9（高 480 → 宽 854），放进 <scrollview scroll-direction="horizontal">，
+# 用户可以左右拖动看完整画面；剧情里则靠 object-fit:cover 自动裁成满屏。
+CG_W = 854
 
 SPRITE_W, SPRITE_H = 143, 380
-BG_COLORS = 128
+# 背景每张要出 BG_TILES 块，块数翻倍体积就翻倍，所以调色板从 128 收到 96 留余量。
+# 真机上实测过的图片预算是 < 9 MB，别把余量吃干净。
+BG_COLORS = 96
 SP_COLORS = 128
-CG_COLORS = 128
+CG_COLORS = 64          # CG 要出全宽，像素是原来的 2.5 倍，调色板降到 64 压体积
 THUMB_W, THUMB_H = 96, 54      # CG 鉴赏缩略图（16:9）
 THUMB_COLORS = 64
 
@@ -101,20 +111,39 @@ def main(raw_dir, proj):
         kind = it["kind"]
 
         if kind == "bg":
-            # 出成宽幅（BG_W 宽），运行时左右平移做全景；
-            # 纵向仍然偏上取景，因为底部会被对话底板挡住
-            im = cover(im, BG_W, SCREEN_H, bias_y=0.42)
-            save_palette(im, dst, BG_COLORS, alpha=False)
+            # 取景成 SCREEN_W*BG_TILES 宽的宽幅，再**预切成整屏大小的图块**，
+            # 运行时用 <swiper autoplay> 轮播，扫出全景。
+            # 纵向偏上取景，因为底部会被对话底板挡住。
+            #   第 0 块写到 assets.json 里的 out（索引表只认这一个文件，下标才不会错位）
+            #   第 1..N-1 块写成 <name>_r.png / _r2.png，运行时按后缀推出来
+            wide = cover(im, SCREEN_W * BG_TILES, SCREEN_H, bias_y=0.42)
+            stem, ext = os.path.splitext(dst)
+            for t in range(BG_TILES):
+                tile = wide.crop((t * SCREEN_W, 0, (t + 1) * SCREEN_W, SCREEN_H))
+                if t == 0:
+                    save_palette(tile, dst, BG_COLORS, alpha=False)
+                else:
+                    suffix = "_r" if t == 1 else ("_r%d" % t)
+                    save_palette(tile, stem + suffix + ext, BG_COLORS, alpha=False)
         elif kind == "sp":
             im = contain(im, SPRITE_W, SPRITE_H, bg=None, anchor="bottom")
             save_palette(im, dst, SP_COLORS, alpha=True)
         else:  # cg
-            # 满屏铺满（cover 裁两侧）。原先用 contain 留黑边，16:9 的图在 336×480 上
-            # 只剩中间 336×189 一条，上下六成全黑，看起来跟没显示一样。
-            im = cover(im, SCREEN_W, SCREEN_H, bias_y=0.5)
+            # 出成完整 16:9（高 480 → 宽 854），鉴赏页可以左右拖动看全图。
+            # 剧情里用 object-fit:cover 显示，组件会自动裁成满屏，不影响正文观感。
+            im = cover(im, CG_W, SCREEN_H, bias_y=0.5)
             save_palette(im, dst, CG_COLORS, alpha=False)
 
+        # 体积统计要把**所有**图块都算上。背景有 BG_TILES 块，
+        # 只统计 assets.json 里的那一张会把背景体积少报一半。
         n = os.path.getsize(dst)
+        if kind == "bg":
+            stem, ext = os.path.splitext(dst)
+            for t in range(1, BG_TILES):
+                suffix = "_r" if t == 1 else ("_r%d" % t)
+                fp = stem + suffix + ext
+                if os.path.isfile(fp):
+                    n += os.path.getsize(fp)
         total += n
         report.setdefault(kind, [0, 0])
         report[kind][0] += 1

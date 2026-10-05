@@ -71,7 +71,7 @@ import { CGG } from '../../common/cglist.js'
 
 // 显示在副标题里的版本号。必须和 src/manifest.json 的 versionName 一致，
 // tools/build.js 的构建前检查会核对，不一致直接拒绝构建。
-const APP_VER = '2.3'
+const APP_VER = '2.3.1'
 
 // 每一行的字符数。字号 15、可用宽 308 → floor(308/15)=20，取 20 保证不折行。
 const CPL = 20

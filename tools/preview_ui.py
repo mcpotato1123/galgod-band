@@ -65,6 +65,16 @@ def base_screen(proj, img, bgidx):
     if bgidx is None or bgidx < 0:
         return canvas
     b = Image.open(px(proj, img[bgidx])).convert("RGBA")
+    # 对齐运行时的 object-fit: cover —— 居中裁切。
+    # 背景现在是正好 336×480 的图块不用管，但 CG 是 854 宽的全图，
+    # 直接贴 (0,0) 会变成左对齐裁切，和真机上看到的画面不一样。
+    if b.size != (W, H):
+        k = max(W / float(b.size[0]), H / float(b.size[1]))
+        nw = max(W, int(round(b.size[0] * k)))
+        nh = max(H, int(round(b.size[1] * k)))
+        b = b.resize((nw, nh), Image.LANCZOS)
+        left, top = (nw - W) // 2, (nh - H) // 2
+        b = b.crop((left, top, left + W, top + H))
     canvas.alpha_composite(b, (0, 0))
     return canvas
 

@@ -55,7 +55,16 @@ def main(root):
         print("✔ 所有文本文件都是合法 UTF-8")
 
     if bad_files:
-        print("\n⚠ 混进了不该上传的文件: %s" % ", ".join(bad_files))
+        # sign/ 里的私钥是**故意**留在工程里的（构建要用来签名），
+        # 它既写在 .gitignore 里、又被 export_repo.py 排除，不会进仓库。
+        # 分开报，免得每次看到都以为出事了。
+        keys = [f for f in bad_files if "sign" in f.replace("\\", "/")]
+        others = [f for f in bad_files if f not in keys]
+        if others:
+            print("\n⚠ 混进了不该上传的文件: %s" % ", ".join(others))
+        if keys:
+            print("\n· 签名证书 %d 个（sign/ 下，构建需要；已在 .gitignore 与导出排除名单里，"
+                  "不会进仓库）" % len(keys))
     if big:
         print("\n⚠ 超过 5MB 的文件:")
         for rel, size in big:

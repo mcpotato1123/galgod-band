@@ -1,9 +1,14 @@
 <template>
   <div class="page" onclick="onTap" onlongpress="toggleImmersive" onswipe="blockSwipe">
 
-    <!-- 背景层：宽幅素材 + CSS transition 缓慢平移，做成全景；
-         没开平移（或素材是窄图）时 bgStyle 为空，退回静态铺满 -->
-    <image class="layer bgw" style="{{bgStyle}}" src="{{bgSrc}}" if="{{bgSrc}}" onswipe="blockSwipe"></image>
+    <!-- 背景层：整屏图块 + <swiper autoplay> 轮播，扫出全景。
+         裁切和动画全部交给 swiper 组件 —— 之前试过「宽图 + left + CSS transition」，
+         真机上会出接缝，所以不再自己做任何 overflow 或位置补间。 -->
+    <swiper class="bgsw" if="{{bgTiles.length}}" autoplay="true"
+            interval="{{BG_STEP_MS}}" duration="{{BG_STEP_MS}}" loop="true"
+            indicator="false" onswipe="blockSwipe">
+      <image class="bgslide" for="{{bgTiles}}" tid="t" src="{{$item}}" onswipe="blockSwipe"></image>
+    </swiper>
     <div class="solid" if="{{showBlack}}"></div>
     <div class="solid-white" if="{{showWhite}}"></div>
 
@@ -91,11 +96,10 @@
 
   .layer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; object-fit: cover; }
 
-  /* 全景背景：素材宽 PAN_BG_W（= 336 + PAN_RANGE），显示框仍是 336 宽，
-     靠 left 在 0 与 -PAN_RANGE 之间来回移动。位移交给 CSS transition 做，
-     不要自己用定时器逐帧改布局 —— 那在手环上又慢又费电。 */
-  .bgw { width: 504px; height: 480px; object-fit: fill;
-         transition-property: left; transition-duration: 22000ms; }
+  /* 全景背景：swiper 里放整屏图块，靠 autoplay 轮播扫出全景。
+     每块都是 336×480（生成时就切好了），所以这里不需要任何缩放或位移。 */
+  .bgsw { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; }
+  .bgslide { width: 336px; height: 480px; object-fit: cover; }
   .solid { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #000000; }
   .solid-white { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #ffffff; }
 
@@ -196,11 +200,15 @@ const TEXT_BOX_H = 122    // 正文区高度：取 122 是为了让最后一行�
 const MAX_LINES = 6       // .ln 的槽位数量，必须 >= 字号 14 时的行数
 
 // ---------------------------------------------------------------- 全景背景
-// 背景素材出成 504 宽（见 tools/gen_assets.py 的 BG_W），显示框 336 宽，
-// 两者之差就是可以平移的距离。CSS transition 的时长要和 PAN_MS 一致，
-// 这样每次定时器触发时上一段平移刚好走完。
-const PAN_RANGE = 168      // 可平移距离 px = 素材宽 504 - 屏幕宽 336
-const PAN_MS = 22000       // 单程平移耗时（同时也是 transition-duration）
+// 背景由 <swiper autoplay> 轮播整屏图块实现（每块 336×480，生成时已切好）。
+// 幻灯片序列是 [第0块, 第1块, ..., 第0块]，末尾重复首块，
+// 这样 loop 绕回时首尾内容相同 —— 衔接处看不出跳变，形成来回扫的效果。
+// BG_STEP_MS 同时作为 interval 和 duration：间隔与动画时长一致，
+// 上一步刚滑完下一步就接上，肉眼看起来是连续平移而不是一顿一顿。
+const BG_STEP_MS = 7000
+// 每个背景的图块数量，必须和 tools/gen_assets.py 的 BG_TILES 一致。
+// 第 0 块就是索引表里的那张，其余是 <name>_r.png / <name>_r2.png。
+const BG_TILE_COUNT = 2
 const AUTO_DEFAULT = 90    // 从菜单打开自动播放时给的默认停留（毫秒/字）
 
 export default {
@@ -225,7 +233,9 @@ export default {
     speaker: '',
     l0: '', l1: '', l2: '', l3: '', l4: '', l5: '',
     s0: '', s1: '', s2: '', s3: '', s4: '', s5: '',
-    bgStyle: '',
+    // 背景轮播的幻灯片列表；长度 0 表示当前没有背景（黑场/白场）
+    bgTiles: [],
+    BG_STEP_MS: BG_STEP_MS,
     canTap: false,
     choices: [],
     menu: false,
@@ -255,8 +265,6 @@ export default {
     this.timer = null
     this.autoTimer = null
     this.saveTimer = null
-    this.panTimer = null
-    this.panTick = false
     this.advanceCount = 0
     this.csRaw = []
     this.settings = DEFAULT_SETTINGS
@@ -305,8 +313,7 @@ export default {
       this.applyFont()
       this.applyScreenKeepOn()
     })
-    // 从别的页面切回来时，平移和常亮都要重新开起来
-    if (this.bgSrc) this.startPan()
+    // 从别的页面切回来时，背景轮播和屏幕常亮都要重新生效
     if (this.pageText) {
       this.typingToken++
       this.renderTyping(this.pageText.length)
@@ -657,9 +664,8 @@ export default {
     this.bgSrc = src
     this.showBlack = idx === -1
     this.showWhite = idx === -2
-    // 换背景时**不重置**平移位置：重置会让新图从旧位置慢慢滑回起点（最长要 22 秒），
-    // 很难看。保持当前偏移继续来回平移即可，反正所有背景都是同一宽度。
-    if (src) this.startPan()
+    // 背景整块换掉：swiper 的幻灯片列表跟着变，autoplay 自己会从头开始扫
+    this.bgTiles = this.buildBgTiles(idx)
   },
 
   renderSprites(cs) {
@@ -816,7 +822,6 @@ export default {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
     if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null }
     this.clearAuto()
-    this.stopPan()
     this.typingToken++
   },
 
@@ -838,26 +843,27 @@ export default {
   },
 
   // ---------------------------------------------------------------- 全景背景
-  // 不自己逐帧改布局：把 left 的补间交给 CSS transition（见 .bgw），
-  // 这里只负责「每 PAN_MS 把目标位置换到另一端」。逐帧改布局在手环上又慢又费电。
-  startPan() {
-    if (this.panTimer) return              // 已经在跑就别重开
-    if (!this.bgSrc) { this.bgStyle = ''; return }
-    if (!this.bgStyle) this.bgStyle = 'left: 0px;'
-    this.panTick = false
-    this.panTimer = setTimeout(() => this.panStep(), PAN_MS)
+  // 背景交给 <swiper autoplay> 轮播整屏图块，代码这边只负责拼出幻灯片列表。
+  // 素材在生成时就已经切成整屏大小（见 tools/gen_assets.py 的 BG_TILES），
+  // 所以这里既不用裁剪也不用补间，是纯数据组装。
+  buildBgTiles(idx) {
+    const first = idx >= 0 ? (IMG[idx] || '') : ''
+    if (!first) return []
+    // 第 0 块在索引表里；其余块是 <name>_r.png / <name>_r2.png
+    const dot = first.lastIndexOf('.')
+    if (dot < 0) return [first]
+    const stem = first.slice(0, dot)
+    const ext = first.slice(dot)
+    const tiles = [first]
+    for (let t = 1; t < BG_TILE_COUNT; t++) {
+      const suffix = t === 1 ? '_r' : ('_r' + t)
+      tiles.push(stem + suffix + ext)
+    }
+    // 末尾重复首块：swiper loop 绕回时首尾内容相同，衔接处看不出跳变，
+    // 于是形成「右 → 右 → 左 → 左」的来回扫，而不是每轮末尾硬跳回去。
+    tiles.push(first)
+    return tiles
   },
-
-  panStep() {
-    this.panTimer = null
-    if (!this.bgSrc) { this.bgStyle = ''; return }
-    // 在 0 与 -PAN_RANGE 之间来回；CSS transition 会把它补成一段匀速平移
-    this.panTick = !this.panTick
-    this.bgStyle = 'left: ' + (this.panTick ? -PAN_RANGE : 0) + 'px;'
-    this.panTimer = setTimeout(() => this.panStep(), PAN_MS)
-  },
-
-  stopPan() { if (this.panTimer) { clearTimeout(this.panTimer); this.panTimer = null } },
 
   // ---------------------------------------------------------------- 交互
   onTap() {
