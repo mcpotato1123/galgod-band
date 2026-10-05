@@ -215,6 +215,26 @@ if (fs.existsSync(genAssets)) {
     if (!/overflow:\s*hidden/.test(cgCode)) {
       bad.push('cg.ux 的查看器没有 overflow:hidden，比屏幕宽的图不会被裁住');
     }
+    // 拖动增益够不够：分母是**手指的实际可用行程**，不是屏宽。
+    // 从屏幕中间起手最多只能挪到边缘，也就是 scrW/2。
+    // 真机上踩过：按"整屏 336"算出增益 1.8，实际一次只能拖 58%，
+    // 表现为「只能拖一半」。
+    const gainM = cgCode.match(/const CG_DRAG_GAIN\s*=\s*([\d.]+)/);
+    const gain = gainM ? Number(gainM[1]) : null;
+    if (gain === null) {
+      bad.push('cg.ux 里找不到 CG_DRAG_GAIN（拖动放大倍数）');
+    } else {
+      const travel = scrW / 2;                 // 从屏幕中间起手的可用行程
+      const reach = gain * travel;
+      const range = cgW - scrW;
+      if (reach < range) {
+        bad.push('CG_DRAG_GAIN=' + gain + ' 不够：从屏幕中间起手手指只能走 ' +
+          travel + 'px，最多拖动 ' + Math.round(reach) + 'px，' +
+          '小于可拖范围 ' + range + 'px（只有 ' +
+          Math.round(reach * 100 / range) + '%）—— 真机上会表现为「只能拖一半」。' +
+          '至少要 ' + Math.ceil(range / travel * 10) / 10);
+      }
+    }
     // 一张 CG 就是一张宽图，靠拖动看两侧；不要再退回「切成多张翻页」那版。
     // 分块翻页是一次跳一整块，观感生硬，而且每张 CG 要出 3 个文件、体积也涨。
     if (/_l'|_r'|"_l"|"_r"|buildPanTiles/.test(cgCode)) {

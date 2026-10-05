@@ -47,6 +47,9 @@
       <div class="vclose" onclick="closeView" onswipe="ban"><text class="vclose-t">关闭</text></div>
 
       <text class="vhint2">按住画面左右拖动，看被裁掉的部分</text>
+      <!-- 位置指示：滑块宽度 = 屏幕宽/图宽，位置 = 当前看到哪一段。
+           既是给玩家的反馈，也是在"拖不动"时能一眼看出卡在哪儿的诊断手段。 -->
+      <div class="track"><div class="thumb2" style="{{indStyle}}"></div></div>
 
       <div class="vbar" if="{{pageAll > 1}}">
         <div class="vbtn" onclick="prev" onswipe="ban"><text class="vbtn-t">‹</text></div>
@@ -107,9 +110,15 @@
             align-items: center; justify-content: center; }
   .vclose-t { font-size: 17px; color: #ffe6ef; }
 
-  /* 提示放在底栏上方一行，别再和底栏重叠（2.3.3 上 top:424 撞上了 top:428 的底栏） */
-  .vhint2 { position: absolute; top: 400px; left: 0px; width: 336px; text-align: center;
+  /* 提示放在底栏上方，别和底栏重叠（2.3.3 上 top:424 撞上了 top:428 的底栏） */
+  .vhint2 { position: absolute; top: 392px; left: 0px; width: 336px; text-align: center;
             font-size: 13px; color: rgba(226, 214, 224, 0.78); }
+
+  /* 位置指示条：轨道 240 宽，滑块宽度按 屏幕宽/图宽 算（336/854 ≈ 94） */
+  .track { position: absolute; top: 412px; left: 48px; width: 240px; height: 5px;
+           border-radius: 3px; background-color: rgba(255, 255, 255, 0.22); }
+  .thumb2 { position: absolute; top: 0px; left: 0px; width: 94px; height: 5px;
+            border-radius: 3px; background-color: #ffd8e6; }
 
   .vbar { position: absolute; top: 428px; left: 22px; width: 292px; height: 42px;
           border-radius: 21px; background-color: rgba(0, 0, 0, 0.62);
@@ -134,10 +143,13 @@ const CG_PAN_RANGE = CG_W - 336        // 可拖动的总距离
 const CG_PAN_STEP = Math.round(CG_PAN_RANGE / 3)   // 点击/滑动兜底时一次走多远
 
 // 拖动放大倍数。
-// 屏幕只有 336 宽，手指一次最多划过一个屏宽，而可拖距离是 518px ——
-// 1:1 跟手的话一次只能拖 65%，划到屏幕边缘就"拖不动"了（真机反馈过）。
-// 放大到 1.8 倍，一次从最左划到最右刚好覆盖整个可拖范围。
-const CG_DRAG_GAIN = 1.8
+// 屏幕上手指的**实际可用行程**才是分母：从屏幕中间起手，最多只能挪到边缘，
+// 也就是 336/2 = 168px，不是整个屏宽。而可拖范围是 518px。
+// 所以要 518/168 ≈ 3.1 才能一次划到底。
+//
+// 之前用 1.8（按"整屏 336"算的），一次只能走 302px = 58%，
+// 真机上就表现为「只能拖一半」。这个 168 是很容易算错的地方。
+const CG_DRAG_GAIN = 3.2
 
 // 触摸事件的坐标字段各版本不统一，挨个试。
 // Vela 的 commonEvents 里有 touchstart/touchmove/touchend，但字段名没有文档。
@@ -172,6 +184,7 @@ export default {
     viewing: false,
     bigSrc: '',
     cgStyle: 'left: 0px;',
+    indStyle: 'left: 0px;',
     canLeft: false,
     canRight: true,
     vName: '',
@@ -250,6 +263,9 @@ export default {
     this.cgStyle = 'left: ' + l + 'px;'
     this.canLeft = l < -2
     this.canRight = l > -CG_PAN_RANGE + 2
+    // 指示条：0 表示看到最左，1 表示看到最右
+    const ratio = CG_PAN_RANGE > 0 ? (-l / CG_PAN_RANGE) : 0
+    this.indStyle = 'left: ' + Math.round((240 - 94) * ratio) + 'px;'
   },
 
   // ---- 连续拖动：left 跟着手指走，不是一格一格跳
