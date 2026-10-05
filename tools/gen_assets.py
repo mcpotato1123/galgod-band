@@ -215,14 +215,17 @@ def main(raw_dir, proj):
         save_palette(canvas, os.path.join(common, "home.png"), 96, alpha=False)
         total += os.path.getsize(os.path.join(common, "home.png"))
 
-    moon = os.path.join(raw_dir, "images", "bg", "moon.avif")
-    if os.path.isfile(moon):
-        im = Image.open(moon).convert("RGB")
-        w, h = im.size
-        side = int(min(w, h) * 0.62)
-        cx, cy = int(w * 0.20), int(h * 0.30)
-        l = max(0, cx - side // 2); t = max(0, cy - side // 2)
-        im = im.crop((l, t, min(w, l + side), min(h, t + side))).resize((192, 192), Image.LANCZOS)
+    # 应用图标：从标题画里取女孩的脸（方图 + 圆角）
+    # 以前是从 moon 背景里取一块，用户要求换成女孩脸。
+    # 这里从原图裁，不依赖外部文件，重跑脚本也能复现。
+    if os.path.isfile(title_src):
+        art = Image.open(title_src).convert("RGB")
+        aw, ah = art.size
+        side = int(ah * 0.56)                      # 约 604，取到肩部的方框
+        cx, cy = int(aw * 0.575), int(ah * 0.32)   # 女孩脸的中心
+        l = max(0, min(aw - side, cx - side // 2))
+        t = max(0, min(ah - side, cy - side // 2))
+        im = art.crop((l, t, l + side, t + side)).resize((192, 192), Image.LANCZOS)
         mask = Image.new("L", (192, 192), 0)
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, 191, 191], radius=44, fill=255)
         out = Image.new("RGBA", (192, 192), (0, 0, 0, 0))
