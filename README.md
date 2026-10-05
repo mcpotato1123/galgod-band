@@ -4,6 +4,7 @@
 
 **引擎与 UI**
 > 1.x版本参照开源工程 [qihe114514/galgaoshou-vela](https://github.com/qihe114514/galgaoshou-vela)（《难道你是GAL高手》手环移植）的架构：**索引 + 分块剧本的流式阅读器 + 声明式图片绑定 + storage 存档**。
+
 > 2.x版本重构所有代码，转为自研引擎，但部分代码仍参考qihe114514的引擎
 
 
