@@ -12,7 +12,7 @@
 CG 鉴赏   9 组 / 32 张差分图，按原作 gallery.rpy 的分组与解锁条件；大图可横向拖动看全图
 页面      7 个：主页 / 正文 / 存档 / 章节 / CG 鉴赏 / 设置 / 关于
 协议      代码 MIT（见 LICENSE）；剧本与美术资源不在 MIT 范围内（见 NOTICE.md）
-产物      dist/com.galgod.band.debug.2.3.1.rpk   8.00 MB
+产物      dist/com.galgod.band.debug.2.3.2.rpk   8.00 MB
 ```
 
 > **免责声明**：本项目是非官方的个人移植，仅供学习交流。
@@ -119,8 +119,8 @@ GalGod手环版/
 
 ```bash
 npm install                    # 只有 aiot-toolkit 一个真正的依赖
-npm run build                  # → dist/com.galgod.band.debug.2.3.1.rpk
-npm run release                # → dist/com.galgod.band.release.2.3.1.rpk（需要 sign/ 下的证书）
+npm run build                  # → dist/com.galgod.band.debug.2.3.2.rpk
+npm run release                # → dist/com.galgod.band.release.2.3.2.rpk（需要 sign/ 下的证书）
 npm run test                   # 排版 + 几何常量 + 全景参数一致性
 npm run start                  # 起模拟器预览（需要 AIoT-IDE/模拟器环境）
 ```
@@ -355,45 +355,44 @@ CG 素材是完整 16:9（**854×480**），比屏幕（336）宽得多，所以
 - CG 之前是裁成 336×480 的，两侧内容直接丢掉了；现在出全宽，
   调色板相应从 128 降到 64 控制体积
 
-### 全景背景：**预切图块 + `<swiper autoplay>`**
+> #### ⚠️ 坑：根节点挂 `onswipe` 会把拖动手势整个吃掉
+>
+> 这个页面的根 `<div class="page">` 原来有 `onswipe="ban"`（本意是屏蔽误触滑动），
+> 结果横向 `scrollview` 收不到拖动，**CG 完全拖不动**。
+>
+> 章节页的 `<list>` 在同款外层下能正常滚动，是因为 `list` 在更底层就接管了手势；
+> `scrollview` 不行。
+>
+> 现在根节点不再挂 `onswipe`（这个页面本来也没有需要屏蔽的滑动手势），
+> `npm run test` 加了检查防止它被加回来。
 
-背景自动全景播放，扫的是从原图宽幅裁出来的**整屏图块**。
+### 全景背景：定时器换 `src`
+
+背景自动"扫"的实现，是**每 `BG_STEP_MS` 把 `<image>` 的 `src` 换成下一张预切图块**，
+两张图块轮流出现。
 
 素材侧（`tools/gen_assets.py`）：把原图取景成 `336 × BG_TILES` 宽的宽幅，
 再**预切成 BG_TILES 张 336×480**。第 0 张写到 `assets.json` 的 `out` 里
 （索引表只认这一张，下标才不会错位），其余写成 `<name>_r.png`、`<name>_r2.png`。
 运行时按后缀推路径，不用查表。
 
-运行时（`game.ux`）：幻灯片列表是 `[第0块, 第1块, …, 第0块]`，
-**末尾重复首块**——`swiper` 的 `loop` 绕回时首尾内容相同，衔接处看不出跳变，
-于是形成「右 → 右 → 左 → 左」的连续来回扫，而不是每轮末尾硬跳回去。
+**为什么做得这么"土"**：前面两条更聪明的路，真机上都失败了。
 
-```html
-<swiper class="bgsw" if="{{bgTiles.length}}" autoplay="true"
-        interval="{{BG_STEP_MS}}" duration="{{BG_STEP_MS}}" loop="true" indicator="false">
-  <image class="bgslide" for="{{bgTiles}}" tid="t" src="{{$item}}"></image>
-</swiper>
-```
+| 方案 | 真机结果 |
+|---|---|
+| ① 宽图（504）+ `left` + CSS `transition` 平移 | ❌ 画面中间一道**竖向接缝**，位置正好等于平移距离（168px），疑似过渡中间态被渲染成两个位置叠加 |
+| ② 预切整屏图块 + `<swiper autoplay>` 轮播 | ❌ **幻灯片不贴合**（中间留黑带，能同时看到两张的一角和中间的空隙），另一张照片里**整个画面被放大** |
+| ③ **定时器换 `src`**（当前） | 只用 `<image>` 的 `src`、`object-fit`、`setTimeout`——**这三个都已在真机上验证可用** |
 
-`BG_STEP_MS` 同时当 `interval` 和 `duration`（默认 7000ms），间隔与动画时长一致，
-上一步刚滑完下一步就接上，看起来是连续平移而不是一顿一顿。
+**代价说清楚：③ 是硬切，不是平滑推移。** 视觉上是两张画面每 7 秒交替一次
+（像镜头的切换），而不是镜头缓缓横移。
+想要真正的平滑推移，需要这个运行时支持 `transition` 或 `swiper`——
+目前两个都不可靠。**宁可要一个能用的硬切，也不要一个花屏的平滑。**
 
-> #### ⚠️ 走过的弯路：不要自己用 `left` + `transition` 平移宽图
->
-> 第一版是把背景出成一张 504×480 的宽图，`<image>` 的 `width` 设为 504，
-> 用 CSS `transition-property: left` 在 `0` 和 `-168px` 之间来回移动来平移。
-> **真机上画面中间出现了一道竖向接缝**（左侧约 168px 一块是花的），
-> 位置正好等于平移距离，怀疑是过渡中间态被渲染成了两个位置的叠加。
->
-> 结论：**手搓 overflow + 位置补间这条路在这个运行时上不可靠**。
-> 换成 swiper 之后，裁切和动画全部由组件自己管，代码里不做任何
-> `overflow` / `left` / `transform` 补间。
-> 这个教训适用于整个工程：**能用组件自带的能力就别自己拼。**
-
-**代价**：背景每张要出 `BG_TILES` 块，块数翻倍体积就翻倍。
+**体积代价**：背景每张要出 `BG_TILES` 块，块数翻倍体积就翻倍。
 调色板因此从 128 收到 **96** 留余量（真机实测的图片预算是 < 9 MB）：
 
-| | 2.2 | 2.3 |
+| | 2.2 | 2.3.2 |
 |---|---|---|
 | 背景 | 336×480 ×38，1.98 MB | **336×480 ×76（两块），3.64 MB** |
 | CG | 336×480 ×34，1.87 MB | **854×480 ×34，3.45 MB** |
@@ -662,14 +661,13 @@ readChunk(chunk, done) {
   它**不能把 `value` 绑成实时值**（会变成受控组件、拖动被弹回），也**不能加 `onswipe`**
   （拖动本身就是 swipe 手势）。改完还没上机验证；即使滑块不可用，
   旁边的 **−／＋ 步进按钮**是普通 `div` + `onclick`，一定能用
-- **`<scrollview scroll-direction="horizontal">`（2.3）**：CG 全图的横向拖动看的就是它，
-  还没上过真机。它是专门做滚动的组件，理论上比手搓 overflow 可靠得多，
-  但**拖动是否能被外层 `.page` 的 `onswipe="ban"` 吃掉**没验证——
-  章节页的 `<list>` 在同款外层下能正常滚动，所以大概率没问题
-- **`<swiper autoplay>`（2.3）**：全景背景靠它轮播整屏图块。
-  `interval` / `duration` 的确切语义（间隔是否包含动画时长）没有文档确认，
-  当前两者都设成 `BG_STEP_MS`。**如果真机上是一顿一顿而不是连续平移，
-  把 `interval` 调小、`duration` 保持**即可
+- **`<scrollview scroll-direction="horizontal">`（2.3）**：CG 全图的横向拖动看的就是它。
+  2.3.1 上拖不动，原因是页面根节点的 `onswipe="ban"` 把手势吃掉了，2.3.2 已去掉；
+  **但去掉之后能否真的拖动仍未上机验证**
+- **背景的换 `src` 播放（2.3.2）**：只用 `<image>` 的 `src` + `setTimeout`，
+  这两样都已验证可用，所以失败概率很低。**但它视觉上是硬切（每 7 秒换一张），
+  不是平滑推移**——追求平滑就得让运行时支持 `transition` 或 `swiper`，
+  目前两个都不可靠
 - **`@system.brightness` 的 `setKeepScreenOn`（2.3）**：接口写法来自另一个
   已编译的 Vela 应用，可以确认；但本机固件是否放行未验证。已包 `try/catch`，
   失败只是不常亮，不会影响阅读

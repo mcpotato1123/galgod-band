@@ -124,17 +124,16 @@ if (fs.existsSync(genAssets)) {
     bad.push('CG_W(' + cgW + ') 必须大于屏幕宽(' + scrW + ')，否则横向滚动没有内容可看');
   }
 
-  // game.ux 里 swiper 与幻灯片的尺寸
-  const bgswW = num(/\.bgsw \{[^}]*?width:\s*(\d+)px/, src);
-  const bgswH = num(/\.bgsw \{[^}]*?height:\s*(\d+)px/, src);
-  const slideW = num(/\.bgslide \{[^}]*?width:\s*(\d+)px/, src);
-  const slideH = num(/\.bgslide \{[^}]*?height:\s*(\d+)px/, src);
-  if (bgswW !== scrW || bgswH !== scrH) {
-    bad.push('CSS .bgsw(' + bgswW + 'x' + bgswH + ') ≠ 屏幕(' + scrW + 'x' + scrH + ')');
+  // game.ux 里背景图必须是静态铺满的 <image>（见下），不再有任何轮播容器
+  if (/<swiper[^>]*bgsw/.test(src) || /\.bgsw\s*\{/.test(src) || /\.bgslide\s*\{/.test(src)) {
+    bad.push('game.ux 里还留着 swiper 轮播背景的痕迹；真机实测 swiper 幻灯片不贴合' +
+      '（中间留黑带）且画面被放大，已改回「定时器换 src」');
   }
-  if (slideW !== scrW || slideH !== scrH) {
-    bad.push('CSS .bgslide(' + slideW + 'x' + slideH + ') ≠ 屏幕(' + scrW + 'x' + scrH +
-      ')：幻灯片是预切好的整屏图，尺寸必须一致');
+  if (!/const BG_STEP_MS\s*=\s*\d+/.test(src)) {
+    bad.push('game.ux 里找不到 BG_STEP_MS（背景换图的间隔）');
+  }
+  if (!/buildBgFrames/.test(src)) {
+    bad.push('game.ux 里找不到 buildBgFrames（拼背景图块路径的函数）');
   }
 
   // cg.ux 里那张全图 CG 的宽度
@@ -152,6 +151,13 @@ if (fs.existsSync(genAssets)) {
     }
     if (!/scroll-direction="horizontal"/.test(cgSrc)) {
       bad.push('cg.ux 的滚动容器不是横向的（缺 scroll-direction="horizontal"），拖动将看不了全图');
+    }
+    // 真机上踩过：根节点挂 onswipe="ban" 会把拖动手势整个吃掉，scrollview 收不到拖动。
+    // 章节页的 <list> 能滚是因为 list 在更底层接管手势，scrollview 不行。
+    const rootTag = (cgSrc.match(/<div class="page"[^>]*>/) || [''])[0];
+    if (/onswipe/.test(rootTag)) {
+      bad.push('cg.ux 根节点挂了 onswipe（' + rootTag.trim() + '）：' +
+        '会把拖动手势吃掉，CG 横向拖动会失效');
     }
   }
 

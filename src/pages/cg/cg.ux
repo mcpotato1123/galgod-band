@@ -1,5 +1,8 @@
 <template>
-  <div class="page" onswipe="ban">
+  <!-- 根节点**不能**挂 onswipe="ban"：它会把拖动手势整个吃掉，
+       横向 scrollview 就再也收不到拖动、CG 拖不动。
+       这个页面本来也没有需要屏蔽的滑动手势，所以直接不挂。 -->
+  <div class="page">
     <text class="title">CG 鉴赏</text>
     <text class="sub">已解锁 {{openCount}} / {{total}} 组 · 点按查看</text>
 

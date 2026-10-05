@@ -1,14 +1,15 @@
 <template>
   <div class="page" onclick="onTap" onlongpress="toggleImmersive" onswipe="blockSwipe">
 
-    <!-- 背景层：整屏图块 + <swiper autoplay> 轮播，扫出全景。
-         裁切和动画全部交给 swiper 组件 —— 之前试过「宽图 + left + CSS transition」，
-         真机上会出接缝，所以不再自己做任何 overflow 或位置补间。 -->
-    <swiper class="bgsw" if="{{bgTiles.length}}" autoplay="true"
-            interval="{{BG_STEP_MS}}" duration="{{BG_STEP_MS}}" loop="true"
-            indicator="false" onswipe="blockSwipe">
-      <image class="bgslide" for="{{bgTiles}}" tid="t" src="{{$item}}" onswipe="blockSwipe"></image>
-    </swiper>
+    <!-- 背景层：静态满屏铺满，靠定时器在两张预切图块之间换 src 来"扫"全景。
+         试过两条更"聪明"的路，真机上都不行：
+           1) 宽图 + left + CSS transition 平移 → 画面中间出竖向接缝
+              （接缝位置正好等于平移距离，疑似过渡中间态被渲染成两个位置叠加）
+           2) 预切图块 + <swiper autoplay> 轮播 → 幻灯片不贴合，中间留黑带、
+              画面还会被放大
+         现在只用**已验证可用**的东西：<image> 的 src、object-fit、setTimeout。
+         代价是切换是硬切而不是平滑推移。 -->
+    <image class="layer" src="{{bgSrc}}" if="{{bgSrc}}" onswipe="blockSwipe"></image>
     <div class="solid" if="{{showBlack}}"></div>
     <div class="solid-white" if="{{showWhite}}"></div>
 
@@ -96,10 +97,8 @@
 
   .layer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; object-fit: cover; }
 
-  /* 全景背景：swiper 里放整屏图块，靠 autoplay 轮播扫出全景。
-     每块都是 336×480（生成时就切好了），所以这里不需要任何缩放或位移。 */
-  .bgsw { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; }
-  .bgslide { width: 336px; height: 480px; object-fit: cover; }
+  /* 全景背景：不做任何位置补间，只在两张预切图块之间换 src。
+     每块都是 336×480（生成时就切好了），所以这里不需要缩放或位移。 */
   .solid { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #000000; }
   .solid-white { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #ffffff; }
 
@@ -200,11 +199,15 @@ const TEXT_BOX_H = 122    // 正文区高度：取 122 是为了让最后一行�
 const MAX_LINES = 6       // .ln 的槽位数量，必须 >= 字号 14 时的行数
 
 // ---------------------------------------------------------------- 全景背景
-// 背景由 <swiper autoplay> 轮播整屏图块实现（每块 336×480，生成时已切好）。
-// 幻灯片序列是 [第0块, 第1块, ..., 第0块]，末尾重复首块，
-// 这样 loop 绕回时首尾内容相同 —— 衔接处看不出跳变，形成来回扫的效果。
-// BG_STEP_MS 同时作为 interval 和 duration：间隔与动画时长一致，
-// 上一步刚滑完下一步就接上，肉眼看起来是连续平移而不是一顿一顿。
+// 背景由<定时器换 src>实现：两张预切图块轮流当背景，看起来就是画面在扫。
+//
+// 走过两条弯路，都记在这里免得以后再踩：
+//   1) 宽图 + left + CSS transition 平移 → 真机画面中间出竖向接缝，
+//      接缝位置正好等于平移距离，疑似过渡中间态被渲染成两个位置叠加
+//   2) 预切图块 + <swiper autoplay> 轮播 → 幻灯片不贴合（中间留黑带），
+//      而且画面被放大
+// 所以现在只用**已经验证可用**的机制：<image> 的 src、object-fit、setTimeout。
+// 代价是切换是硬切，不是平滑推移。
 const BG_STEP_MS = 7000
 // 每个背景的图块数量，必须和 tools/gen_assets.py 的 BG_TILES 一致。
 // 第 0 块就是索引表里的那张，其余是 <name>_r.png / <name>_r2.png。
@@ -233,9 +236,6 @@ export default {
     speaker: '',
     l0: '', l1: '', l2: '', l3: '', l4: '', l5: '',
     s0: '', s1: '', s2: '', s3: '', s4: '', s5: '',
-    // 背景轮播的幻灯片列表；长度 0 表示当前没有背景（黑场/白场）
-    bgTiles: [],
-    BG_STEP_MS: BG_STEP_MS,
     canTap: false,
     choices: [],
     menu: false,
@@ -265,6 +265,9 @@ export default {
     this.timer = null
     this.autoTimer = null
     this.saveTimer = null
+    this.bgTimer = null
+    this.bgFrame = 0
+    this.bgFrames = []
     this.advanceCount = 0
     this.csRaw = []
     this.settings = DEFAULT_SETTINGS
@@ -314,6 +317,7 @@ export default {
       this.applyScreenKeepOn()
     })
     // 从别的页面切回来时，背景轮播和屏幕常亮都要重新生效
+    if (this.bgSrc) this.startBgSwap()
     if (this.pageText) {
       this.typingToken++
       this.renderTyping(this.pageText.length)
@@ -664,8 +668,10 @@ export default {
     this.bgSrc = src
     this.showBlack = idx === -1
     this.showWhite = idx === -2
-    // 背景整块换掉：swiper 的幻灯片列表跟着变，autoplay 自己会从头开始扫
-    this.bgTiles = this.buildBgTiles(idx)
+    // 背景整组换掉：图块列表重建，从头开始扫
+    this.bgFrames = this.buildBgFrames(idx)
+    this.bgFrame = 0
+    this.startBgSwap()
   },
 
   renderSprites(cs) {
@@ -822,6 +828,7 @@ export default {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
     if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null }
     this.clearAuto()
+    this.stopBgSwap()
     this.typingToken++
   },
 
@@ -843,27 +850,40 @@ export default {
   },
 
   // ---------------------------------------------------------------- 全景背景
-  // 背景交给 <swiper autoplay> 轮播整屏图块，代码这边只负责拼出幻灯片列表。
+  // 只做一件事：每 BG_STEP_MS 把背景 src 换成下一张图块。
   // 素材在生成时就已经切成整屏大小（见 tools/gen_assets.py 的 BG_TILES），
-  // 所以这里既不用裁剪也不用补间，是纯数据组装。
-  buildBgTiles(idx) {
+  // 所以既不用裁剪也不用补间，是纯 src 替换。
+  buildBgFrames(idx) {
     const first = idx >= 0 ? (IMG[idx] || '') : ''
     if (!first) return []
-    // 第 0 块在索引表里；其余块是 <name>_r.png / <name>_r2.png
     const dot = first.lastIndexOf('.')
     if (dot < 0) return [first]
     const stem = first.slice(0, dot)
     const ext = first.slice(dot)
-    const tiles = [first]
+    const frames = [first]
     for (let t = 1; t < BG_TILE_COUNT; t++) {
       const suffix = t === 1 ? '_r' : ('_r' + t)
-      tiles.push(stem + suffix + ext)
+      frames.push(stem + suffix + ext)
     }
-    // 末尾重复首块：swiper loop 绕回时首尾内容相同，衔接处看不出跳变，
-    // 于是形成「右 → 右 → 左 → 左」的来回扫，而不是每轮末尾硬跳回去。
-    tiles.push(first)
-    return tiles
+    return frames
   },
+
+  startBgSwap() {
+    this.stopBgSwap()
+    if (!this.bgFrames || this.bgFrames.length < 2) return
+    this.bgTimer = setTimeout(() => this.bgStep(), BG_STEP_MS)
+  },
+
+  bgStep() {
+    this.bgTimer = null
+    const frames = this.bgFrames
+    if (!frames || frames.length < 2) return
+    this.bgFrame = (this.bgFrame + 1) % frames.length
+    this.bgSrc = frames[this.bgFrame]
+    this.bgTimer = setTimeout(() => this.bgStep(), BG_STEP_MS)
+  },
+
+  stopBgSwap() { if (this.bgTimer) { clearTimeout(this.bgTimer); this.bgTimer = null } },
 
   // ---------------------------------------------------------------- 交互
   onTap() {
