@@ -3,8 +3,16 @@
 
     <!-- 背景层：一张宽图 + 定时器小步推进 left 做平移。
          不用 CSS transition、不用 swiper —— 那两个在真机上都不行，
-         详见下方 BG_PAN_RANGE 附近的说明。 -->
-    <image class="layer bgwide" style="{{bgStyle}}" src="{{bgSrc}}" if="{{bgSrc}}" onswipe="blockSwipe"></image>
+         详见下方 BG_PAN_RANGE 附近的说明。
+
+         外面必须套一个 overflow:hidden 的裁切容器：宽图是 672、屏幕只有 336，
+         不裁住的话运行时会把这个页面当成"内容比视口宽"的横向可滚动区域，
+         玩家一拖就把整个背景拖走。**只给 .page 加 overflow 不够保险**
+         （根节点是页面本身，运行时不一定会把它当普通容器处理），
+         所以这里用一个明确的子容器再裁一层。 -->
+    <div class="bgclip" onswipe="blockSwipe">
+      <image class="bgwide" style="{{bgStyle}}" src="{{bgSrc}}" if="{{bgSrc}}" onswipe="blockSwipe"></image>
+    </div>
     <div class="solid" if="{{showBlack}}"></div>
     <div class="solid-white" if="{{showWhite}}"></div>
 
@@ -97,8 +105,14 @@
   .layer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; object-fit: cover; }
 
   /* 全景背景：比屏幕宽 BG_PAN_RANGE 的一张宽图，left 由定时器小步推进。
-     不要给它加 transition —— 真机上会渲染出重影/接缝。 */
-  .bgwide { width: 672px; height: 480px; object-fit: fill; }
+     两层保险：
+       1) .bgclip 是明确的裁切容器（overflow:hidden），把 672 宽的图裁在 336 里
+       2) .page 上也有 overflow:hidden
+     不要给 .bgwide 加 transition —— 真机上会渲染出重影/接缝。 */
+  .bgclip { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
+            overflow: hidden; }
+  .bgwide { position: absolute; top: 0px; left: 0px; width: 672px; height: 480px;
+            object-fit: fill; }
   .solid { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #000000; }
   .solid-white { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #ffffff; }
 

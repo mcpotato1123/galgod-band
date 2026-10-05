@@ -215,6 +215,12 @@ if (fs.existsSync(genAssets)) {
     if (!/overflow:\s*hidden/.test(cgCode)) {
       bad.push('cg.ux 的查看器没有 overflow:hidden，比屏幕宽的图不会被裁住');
     }
+    // 一张 CG 就是一张宽图，靠拖动看两侧；不要再退回「切成多张翻页」那版。
+    // 分块翻页是一次跳一整块，观感生硬，而且每张 CG 要出 3 个文件、体积也涨。
+    if (/_l'|_r'|"_l"|"_r"|buildPanTiles/.test(cgCode)) {
+      bad.push('cg.ux 里出现了 _l / _r 分块的痕迹：' +
+        'CG 应该是一张宽图靠拖动看，不要切块翻页');
+    }
   }
 
   if (bad.length) {
