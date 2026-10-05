@@ -1,15 +1,10 @@
 <template>
   <div class="page" onclick="onTap" onlongpress="toggleImmersive" onswipe="blockSwipe">
 
-    <!-- 背景层：静态满屏铺满，靠定时器在两张预切图块之间换 src 来"扫"全景。
-         试过两条更"聪明"的路，真机上都不行：
-           1) 宽图 + left + CSS transition 平移 → 画面中间出竖向接缝
-              （接缝位置正好等于平移距离，疑似过渡中间态被渲染成两个位置叠加）
-           2) 预切图块 + <swiper autoplay> 轮播 → 幻灯片不贴合，中间留黑带、
-              画面还会被放大
-         现在只用**已验证可用**的东西：<image> 的 src、object-fit、setTimeout。
-         代价是切换是硬切而不是平滑推移。 -->
-    <image class="layer" src="{{bgSrc}}" if="{{bgSrc}}" onswipe="blockSwipe"></image>
+    <!-- 背景层：一张宽图 + 定时器小步推进 left 做平移。
+         不用 CSS transition、不用 swiper —— 那两个在真机上都不行，
+         详见下方 BG_PAN_RANGE 附近的说明。 -->
+    <image class="layer bgwide" style="{{bgStyle}}" src="{{bgSrc}}" if="{{bgSrc}}" onswipe="blockSwipe"></image>
     <div class="solid" if="{{showBlack}}"></div>
     <div class="solid-white" if="{{showWhite}}"></div>
 
@@ -97,8 +92,9 @@
 
   .layer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; object-fit: cover; }
 
-  /* 全景背景：不做任何位置补间，只在两张预切图块之间换 src。
-     每块都是 336×480（生成时就切好了），所以这里不需要缩放或位移。 */
+  /* 全景背景：比屏幕宽 BG_PAN_RANGE 的一张宽图，left 由定时器小步推进。
+     不要给它加 transition —— 真机上会渲染出重影/接缝。 */
+  .bgwide { width: 672px; height: 480px; object-fit: fill; }
   .solid { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #000000; }
   .solid-white { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #ffffff; }
 
@@ -199,19 +195,22 @@ const TEXT_BOX_H = 122    // 正文区高度：取 122 是为了让最后一行�
 const MAX_LINES = 6       // .ln 的槽位数量，必须 >= 字号 14 时的行数
 
 // ---------------------------------------------------------------- 全景背景
-// 背景由<定时器换 src>实现：两张预切图块轮流当背景，看起来就是画面在扫。
+// 背景是一张 BG_W 宽的宽图，显示框只有 336 宽，靠**定时器小步推进 left** 做平移。
 //
-// 走过两条弯路，都记在这里免得以后再踩：
-//   1) 宽图 + left + CSS transition 平移 → 真机画面中间出竖向接缝，
+// 为什么不用更"聪明"的两条路（都在真机上失败，记下来免得再踩）：
+//   1) 宽图 + left + CSS transition 平移 → 画面中间出竖向接缝，
 //      接缝位置正好等于平移距离，疑似过渡中间态被渲染成两个位置叠加
-//   2) 预切图块 + <swiper autoplay> 轮播 → 幻灯片不贴合（中间留黑带），
-//      而且画面被放大
-// 所以现在只用**已经验证可用**的机制：<image> 的 src、object-fit、setTimeout。
-// 代价是切换是硬切，不是平滑推移。
-const BG_STEP_MS = 7000
-// 每个背景的图块数量，必须和 tools/gen_assets.py 的 BG_TILES 一致。
-// 第 0 块就是索引表里的那张，其余是 <name>_r.png / <name>_r2.png。
-const BG_TILE_COUNT = 2
+//   2) 预切整屏图块 + <swiper autoplay> 轮播 → 幻灯片不贴合（中间留黑带）、
+//      另一版里整个画面还被放大
+// left 本身是能正确渲染的（方案 1 里画面位置就是对的，坏的只是 transition 补间），
+// 所以这里自己按固定间隔推进 left，**完全不碰 transition**。
+//
+// 步长 4px / 100ms = 40px/s，扫完 336px 约 8.4 秒。
+// 步子再小也不会更顺（这是 10fps 的离散推进），再大就会看出跳。
+const BG_W = 672           // 背景素材宽度，必须与 tools/gen_assets.py 的 BG_W 一致
+const BG_PAN_RANGE = BG_W - 336   // 可平移距离
+const BG_STEP_PX = 4       // 每帧推进多少像素
+const BG_TICK_MS = 100     // 每帧间隔（10fps）
 const AUTO_DEFAULT = 90    // 从菜单打开自动播放时给的默认停留（毫秒/字）
 
 export default {
@@ -236,6 +235,7 @@ export default {
     speaker: '',
     l0: '', l1: '', l2: '', l3: '', l4: '', l5: '',
     s0: '', s1: '', s2: '', s3: '', s4: '', s5: '',
+    bgStyle: '',
     canTap: false,
     choices: [],
     menu: false,
@@ -266,8 +266,8 @@ export default {
     this.autoTimer = null
     this.saveTimer = null
     this.bgTimer = null
-    this.bgFrame = 0
-    this.bgFrames = []
+    this.bgOffset = 0
+    this.bgDir = 1
     this.advanceCount = 0
     this.csRaw = []
     this.settings = DEFAULT_SETTINGS
@@ -317,7 +317,7 @@ export default {
       this.applyScreenKeepOn()
     })
     // 从别的页面切回来时，背景轮播和屏幕常亮都要重新生效
-    if (this.bgSrc) this.startBgSwap()
+    if (this.bgSrc) this.startBgPan()
     if (this.pageText) {
       this.typingToken++
       this.renderTyping(this.pageText.length)
@@ -664,14 +664,11 @@ export default {
   },
 
   applyBg(idx) {
-    const src = idx >= 0 ? (IMG[idx] || '') : ''
-    this.bgSrc = src
+    this.bgSrc = idx >= 0 ? (IMG[idx] || '') : ''
     this.showBlack = idx === -1
     this.showWhite = idx === -2
-    // 背景整组换掉：图块列表重建，从头开始扫
-    this.bgFrames = this.buildBgFrames(idx)
-    this.bgFrame = 0
-    this.startBgSwap()
+    // 换背景时从最左边重新开始扫（起点统一，不会出现"从中间开始"的怪异观感）
+    this.startBgPan()
   },
 
   renderSprites(cs) {
@@ -828,7 +825,7 @@ export default {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
     if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null }
     this.clearAuto()
-    this.stopBgSwap()
+    this.stopBgPan()
     this.typingToken++
   },
 
@@ -850,40 +847,27 @@ export default {
   },
 
   // ---------------------------------------------------------------- 全景背景
-  // 只做一件事：每 BG_STEP_MS 把背景 src 换成下一张图块。
-  // 素材在生成时就已经切成整屏大小（见 tools/gen_assets.py 的 BG_TILES），
-  // 所以既不用裁剪也不用补间，是纯 src 替换。
-  buildBgFrames(idx) {
-    const first = idx >= 0 ? (IMG[idx] || '') : ''
-    if (!first) return []
-    const dot = first.lastIndexOf('.')
-    if (dot < 0) return [first]
-    const stem = first.slice(0, dot)
-    const ext = first.slice(dot)
-    const frames = [first]
-    for (let t = 1; t < BG_TILE_COUNT; t++) {
-      const suffix = t === 1 ? '_r' : ('_r' + t)
-      frames.push(stem + suffix + ext)
-    }
-    return frames
+  // 每 BG_TICK_MS 把 left 推进 BG_STEP_PX，走到头再往回走，来回扫。
+  // 完全不碰 CSS transition —— 那玩意在这个运行时上会渲染出接缝。
+  startBgPan() {
+    this.stopBgPan()
+    if (!this.bgSrc) { this.bgStyle = ''; return }
+    this.bgOffset = 0
+    this.bgDir = 1
+    this.bgStyle = 'left: 0px;'
+    this.bgTimer = setInterval(() => this.bgPanTick(), BG_TICK_MS)
   },
 
-  startBgSwap() {
-    this.stopBgSwap()
-    if (!this.bgFrames || this.bgFrames.length < 2) return
-    this.bgTimer = setTimeout(() => this.bgStep(), BG_STEP_MS)
+  bgPanTick() {
+    if (!this.bgSrc) return
+    let off = this.bgOffset + this.bgDir * BG_STEP_PX
+    if (off >= BG_PAN_RANGE) { off = BG_PAN_RANGE; this.bgDir = -1 }
+    else if (off <= 0) { off = 0; this.bgDir = 1 }
+    this.bgOffset = off
+    this.bgStyle = 'left: -' + off + 'px;'
   },
 
-  bgStep() {
-    this.bgTimer = null
-    const frames = this.bgFrames
-    if (!frames || frames.length < 2) return
-    this.bgFrame = (this.bgFrame + 1) % frames.length
-    this.bgSrc = frames[this.bgFrame]
-    this.bgTimer = setTimeout(() => this.bgStep(), BG_STEP_MS)
-  },
-
-  stopBgSwap() { if (this.bgTimer) { clearTimeout(this.bgTimer); this.bgTimer = null } },
+  stopBgPan() { if (this.bgTimer) { clearInterval(this.bgTimer); this.bgTimer = null } },
 
   // ---------------------------------------------------------------- 交互
   onTap() {

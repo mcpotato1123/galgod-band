@@ -24,28 +24,36 @@ from PIL import Image, ImageDraw, ImageFont
 # 画布与运行时组件尺寸（与 src/pages/game/game.ux 的 CSS 保持一致）
 SCREEN_W, SCREEN_H = 336, 480
 
-# ---- 背景：自动全景
-# 不再输出一张宽图让运行时自己平移（试过，真机上出接缝），
-# 而是把宽幅画面**预切成整屏大小的图块**，运行时用 <swiper autoplay> 轮播。
-# 裁切与动画全部交给 swiper 组件，代码里不做任何 overflow 或 left 补间。
+# ---- 背景：全景
+# 出一张宽幅（BG_W 宽），运行时用**定时器逐帧推进 left**做平移。
 #
-#   BG_TILES = 1  → 不平移（等于老行为，只出一张）
-#   BG_TILES = 2  → 两个位置，来回扫 336px（当前）
-#   BG_TILES = 3  → 三个位置，来回扫 672px，背景体积再涨 50%
-# 取景宽度 = SCREEN_W * BG_TILES。game.ux 的幻灯片列表必须与这里一致。
-BG_TILES = 2
+# 为什么不用更"聪明"的办法：真机上试过两条，都失败
+#   1) 宽图 + left + CSS transition → 画面中间出竖向接缝
+#      （接缝位置正好等于平移距离，疑似过渡中间态被渲染成两个位置叠加）
+#   2) 预切整屏图块 + <swiper autoplay> → 幻灯片不贴合（中间留黑带）、画面被放大
+# left 本身是能正确渲染的（方案 1 里画面位置是对的，坏的只是 transition 补间），
+# 所以现在改成自己按固定间隔小步推进 left，完全不碰 transition。
+#
+#   BG_W = SCREEN_W  → 不平移
+#   BG_W = 672       → 可平移 336px（当前，2 屏宽）
+BG_W = 672
 
 # ---- CG：滑动看全图
-# 出成完整 16:9（高 480 → 宽 854），放进 <scrollview scroll-direction="horizontal">，
-# 用户可以左右拖动看完整画面；剧情里则靠 object-fit:cover 自动裁成满屏。
+# 出成完整 16:9（高 480 → 宽 854），再**预切成 CG_TILES 张整屏图**，
+# 运行时用 onswipe / 点击翻页，就能看到原本被裁掉的两侧。
+# 用预切图而不是横向 scrollview：scrollview 的拖动在真机上完全不响应。
+#
+#   CG_TILES = 1 → 只有中间一张（等于老行为）
+#   CG_TILES = 3 → 左/中/右，可分页看全图（当前）
 CG_W = 854
+CG_TILES = 3
 
 SPRITE_W, SPRITE_H = 143, 380
-# 背景每张要出 BG_TILES 块，块数翻倍体积就翻倍，所以调色板从 128 收到 96 留余量。
-# 真机上实测过的图片预算是 < 9 MB，别把余量吃干净。
-BG_COLORS = 96
+# 背景要出 672 宽的宽幅、CG 要出 3 张，体积都涨，调色板相应收一点留余量。
+# 真机上实测过的图片预算是 < 9 MB —— 别贴着上限跑，留出以后加素材的空间。
+BG_COLORS = 80
 SP_COLORS = 128
-CG_COLORS = 64          # CG 要出全宽，像素是原来的 2.5 倍，调色板降到 64 压体积
+CG_COLORS = 56
 THUMB_W, THUMB_H = 96, 54      # CG 鉴赏缩略图（16:9）
 THUMB_COLORS = 64
 
@@ -101,6 +109,21 @@ def main(raw_dir, proj):
     total = 0
     report = {}
 
+    # 先清空 img/ 再生成。
+    # 派生文件名是按后缀拼的（CG 的 _l/_r 等），改了命名规则之后旧文件不会被覆盖，
+    # 会**留在包里**白白占体积、还可能被误用到。踩过一次：背景从「2 块图块」
+    # 改回「1 张宽图」后，旧的 38 张图块还躺在 img/b 里，体积虚高 1.6 MB。
+    # home.png / icon.png 在 common/ 下、不在 img/，不受影响。
+    if os.path.isdir(out_root):
+        import shutil as _shutil
+        removed = 0
+        for d in os.listdir(out_root):
+            p = os.path.join(out_root, d)
+            if os.path.isdir(p):
+                removed += len(os.listdir(p))
+                _shutil.rmtree(p)
+        print("  已清空 img/（删掉 %d 个旧文件，避免改名后的残留留在包里）" % removed)
+
     for it in assets:
         src = os.path.join(raw_dir, it["src"].replace("/", os.sep))
         if not os.path.isfile(src):
@@ -111,37 +134,42 @@ def main(raw_dir, proj):
         kind = it["kind"]
 
         if kind == "bg":
-            # 取景成 SCREEN_W*BG_TILES 宽的宽幅，再**预切成整屏大小的图块**，
-            # 运行时用 <swiper autoplay> 轮播，扫出全景。
+            # 一张宽幅，运行时靠定时器推进 left 平移。
             # 纵向偏上取景，因为底部会被对话底板挡住。
-            #   第 0 块写到 assets.json 里的 out（索引表只认这一个文件，下标才不会错位）
-            #   第 1..N-1 块写成 <name>_r.png / _r2.png，运行时按后缀推出来
-            wide = cover(im, SCREEN_W * BG_TILES, SCREEN_H, bias_y=0.42)
-            stem, ext = os.path.splitext(dst)
-            for t in range(BG_TILES):
-                tile = wide.crop((t * SCREEN_W, 0, (t + 1) * SCREEN_W, SCREEN_H))
-                if t == 0:
-                    save_palette(tile, dst, BG_COLORS, alpha=False)
-                else:
-                    suffix = "_r" if t == 1 else ("_r%d" % t)
-                    save_palette(tile, stem + suffix + ext, BG_COLORS, alpha=False)
+            im = cover(im, BG_W, SCREEN_H, bias_y=0.42)
+            save_palette(im, dst, BG_COLORS, alpha=False)
         elif kind == "sp":
             im = contain(im, SPRITE_W, SPRITE_H, bg=None, anchor="bottom")
             save_palette(im, dst, SP_COLORS, alpha=True)
         else:  # cg
-            # 出成完整 16:9（高 480 → 宽 854），鉴赏页可以左右拖动看全图。
-            # 剧情里用 object-fit:cover 显示，组件会自动裁成满屏，不影响正文观感。
-            im = cover(im, CG_W, SCREEN_H, bias_y=0.5)
-            save_palette(im, dst, CG_COLORS, alpha=False)
-
-        # 体积统计要把**所有**图块都算上。背景有 BG_TILES 块，
-        # 只统计 assets.json 里的那一张会把背景体积少报一半。
-        n = os.path.getsize(dst)
-        if kind == "bg":
+            # 先取完整的 16:9 宽幅，再预切成 CG_TILES 张整屏图：
+            #   中间那张 写到 assets.json 的 out（剧情正文用它 + object-fit:cover，
+            #   正好等于老的居中裁切观感，而且索引表只认一个文件、下标不会错位）
+            #   最左 / 最右 写成 <name>_l.png / <name>_r.png，运行时按后缀推出来
+            wide = cover(im, CG_W, SCREEN_H, bias_y=0.5)
+            span = CG_W - SCREEN_W
             stem, ext = os.path.splitext(dst)
-            for t in range(1, BG_TILES):
-                suffix = "_r" if t == 1 else ("_r%d" % t)
-                fp = stem + suffix + ext
+            mid = CG_TILES // 2
+            for t in range(CG_TILES):
+                # t=0 最左，t=CG_TILES-1 最右
+                off = int(round(span * t / float(max(1, CG_TILES - 1))))
+                tile = wide.crop((off, 0, off + SCREEN_W, SCREEN_H))
+                if t == mid:
+                    save_palette(tile, dst, CG_COLORS, alpha=False)
+                elif t == 0:
+                    save_palette(tile, stem + "_l" + ext, CG_COLORS, alpha=False)
+                elif t == CG_TILES - 1:
+                    save_palette(tile, stem + "_r" + ext, CG_COLORS, alpha=False)
+                else:
+                    save_palette(tile, stem + ("_t%d" % t) + ext, CG_COLORS, alpha=False)
+
+        # 体积统计要把**所有**派生图都算上。
+        # CG 一张源图会出 CG_TILES 个文件，只统计 assets.json 里那一张会少报。
+        n = os.path.getsize(dst)
+        stem, ext = os.path.splitext(dst)
+        if kind == "cg":
+            for suf in ["_l", "_r"] + [("_t%d" % t) for t in range(1, CG_TILES - 1)]:
+                fp = stem + suf + ext
                 if os.path.isfile(fp):
                     n += os.path.getsize(fp)
         total += n

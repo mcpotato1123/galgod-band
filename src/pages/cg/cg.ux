@@ -1,7 +1,6 @@
 <template>
-  <!-- 根节点**不能**挂 onswipe="ban"：它会把拖动手势整个吃掉，
-       横向 scrollview 就再也收不到拖动、CG 拖不动。
-       这个页面本来也没有需要屏蔽的滑动手势，所以直接不挂。 -->
+  <!-- 根节点**不能**挂 onswipe：那会把滑动手势整个吃掉（2.3.1 上 CG 拖不动就是这个原因）。
+       这个页面需要的是"接住"滑动来翻页，所以 onswipe 只挂在要看全图的那张图上。 -->
   <div class="page">
     <text class="title">CG 鉴赏</text>
     <text class="sub">已解锁 {{openCount}} / {{total}} 组 · 点按查看</text>
@@ -22,13 +21,19 @@
     <div class="back" onclick="back" onswipe="ban"><text class="btn-t">返回</text></div>
 
     <!-- 大图查看
-         CG 素材是完整 16:9（854×480），比屏幕宽得多，所以放进横向 scrollview，
-         **左右拖动就能看到被裁掉的两侧**。
-         同一组的差分图用下面的 ‹ › 切换 —— 拖动是留给"看全图"的，不抢这个手势。 -->
+         CG 素材是完整 16:9，被预切成 3 张整屏图（左/中/右），
+         左右滑动或点两侧就能看到被裁掉的部分。
+         不用横向 scrollview：它的拖动在这台设备上完全不响应。
+         同一组的差分图仍然用下面的 ‹ › 切换。 -->
     <div class="viewer" if="{{viewing}}">
-      <scrollview class="sv" scroll-direction="horizontal" show-scrollbar="false">
-        <image class="big" src="{{bigSrc}}"></image>
-      </scrollview>
+      <image class="big" src="{{panSrc}}" onswipe="onPanSwipe"></image>
+
+      <!-- onswipe 万一不灵的保底：点画面左右两侧翻页。
+           用普通 div + onclick，这两个在所有页面都已验证可用。 -->
+      <div class="tapzone zl" if="{{panAll > 1 && panIdx > 0}}"
+           onclick="panPrev" onswipe="ban"></div>
+      <div class="tapzone zr" if="{{panAll > 1 && panIdx < panAll - 1}}"
+           onclick="panNext" onswipe="ban"></div>
 
       <div class="vtop">
         <text class="vname">{{vName}}</text>
@@ -37,12 +42,13 @@
 
       <div class="vclose" onclick="closeView" onswipe="ban"><text class="vclose-t">关闭</text></div>
 
+      <text class="vhint2" if="{{panAll > 1}}">左右滑动 / 点两侧，看被裁掉的部分　{{panIdx + 1}}/{{panAll}}</text>
+
       <div class="vbar" if="{{pageAll > 1}}">
         <div class="vbtn" onclick="prev" onswipe="ban"><text class="vbtn-t">‹</text></div>
-        <text class="vhint">拖动看全图</text>
+        <text class="vhint">换一张差分</text>
         <div class="vbtn" onclick="next" onswipe="ban"><text class="vbtn-t">›</text></div>
       </div>
-      <text class="vhint2" if="{{pageAll <= 1}}">← 左右拖动看全图 →</text>
     </div>
   </div>
 </template>
@@ -74,10 +80,13 @@
 
   .viewer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
             background-color: #000000; }
-  /* 横向滚动容器：显式给宽高，里面那张图比它宽，多出来的部分靠拖动看 */
-  .sv { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; }
-  /* CG_W 必须等于 tools/gen_assets.py 的 CG_W，npm run test 会核对 */
-  .big { width: 854px; height: 480px; }
+  /* 每张预切图本身就是 336×480，所以这里 1:1 铺满，不需要缩放 */
+  .big { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; }
+
+  /* 点击翻页的热区：只占左右窄条，避开顶栏和底栏，不挡关闭/切换按钮 */
+  .tapzone { position: absolute; top: 56px; width: 52px; height: 366px; }
+  .zl { left: 0px; }
+  .zr { left: 284px; }
 
   .vtop { position: absolute; top: 10px; left: 0px; width: 336px; flex-direction: row;
           align-items: center; padding-left: 14px; padding-right: 86px; }
@@ -89,7 +98,10 @@
             align-items: center; justify-content: center; }
   .vclose-t { font-size: 17px; color: #ffe6ef; }
 
-  .vbar { position: absolute; top: 430px; left: 22px; width: 292px; height: 42px;
+  .vhint2 { position: absolute; top: 424px; left: 0px; width: 336px; text-align: center;
+            font-size: 13px; color: rgba(226, 214, 224, 0.8); }
+
+  .vbar { position: absolute; top: 428px; left: 22px; width: 292px; height: 42px;
           border-radius: 21px; background-color: rgba(0, 0, 0, 0.62);
           flex-direction: row; align-items: center; justify-content: space-between;
           padding-left: 6px; padding-right: 6px; }
@@ -97,8 +109,6 @@
           align-items: center; justify-content: center; }
   .vbtn-t { font-size: 22px; color: #ffffff; }
   .vhint { font-size: 14px; color: rgba(226, 214, 224, 0.8); }
-  .vhint2 { position: absolute; top: 440px; left: 0px; width: 336px; text-align: center;
-            font-size: 14px; color: rgba(226, 214, 224, 0.72); }
 </style>
 
 <script>
@@ -108,6 +118,15 @@ import { CGG } from '../../common/cglist.js'
 import { IMG } from '../../common/assets.js'
 import { loadSeen } from '../../common/reader.js'
 
+// onswipe 的方向字段在不同版本里可能给 evt.direction / evt.detail.direction / evt.target.direction
+function readDir(e) {
+  if (e === null || e === undefined) return ''
+  if (typeof e.direction === 'string') return e.direction
+  if (e.detail && typeof e.detail.direction === 'string') return e.detail.direction
+  if (e.target && typeof e.target.direction === 'string') return e.target.direction
+  return ''
+}
+
 export default {
   // 统一用 protected，不要用 data（两者不能共存，运行时会抛错）
   protected: {
@@ -115,7 +134,9 @@ export default {
     openCount: 0,
     total: 0,
     viewing: false,
-    bigSrc: '',
+    panSrc: '',
+    panIdx: 0,
+    panAll: 1,
     vName: '',
     pageNo: 1,
     pageAll: 1
@@ -126,6 +147,7 @@ export default {
     this.groups = CGG || []
     this.curGroup = -1
     this.curPage = 0
+    this.panTiles = []
     this.lockTap = 0
     loadSeen((list) => {
       for (let i = 0; i < list.length; i++) this.seen[list[i]] = 1
@@ -155,6 +177,18 @@ export default {
   ban() {},
   lock() { this.lockTap = Date.now() },
 
+  // 索引表里存的是**中间**那张（剧情正文用它，配合 object-fit:cover 就是居中裁切）。
+  // 最左/最右是按 <name>_l / <name>_r 后缀推出来的，不用查表。
+  buildPanTiles(idx) {
+    const mid = IMG[idx] || ''
+    if (!mid) return ['']
+    const dot = mid.lastIndexOf('.')
+    if (dot < 0) return [mid]
+    const stem = mid.slice(0, dot)
+    const ext = mid.slice(dot)
+    return [stem + '_l' + ext, mid, stem + '_r' + ext]
+  },
+
   open(i) {
     this.lock()
     const g = this.groups[i]
@@ -174,8 +208,26 @@ export default {
   showPage() {
     const g = this.groups[this.curGroup]
     if (!g) return
-    this.bigSrc = IMG[g.im[this.curPage]] || ''
+    this.panTiles = this.buildPanTiles(g.im[this.curPage])
+    this.panAll = this.panTiles.length
+    this.panIdx = Math.floor(this.panAll / 2)   // 默认停在中间那张
+    this.panSrc = this.panTiles[this.panIdx] || ''
     this.pageNo = this.curPage + 1
+  },
+
+  setPan(i) {
+    if (i < 0 || i >= this.panAll) return
+    this.panIdx = i
+    this.panSrc = this.panTiles[i] || ''
+  },
+
+  panPrev() { this.lock(); this.setPan(this.panIdx - 1) },
+  panNext() { this.lock(); this.setPan(this.panIdx + 1) },
+
+  onPanSwipe(e) {
+    const dir = readDir(e)
+    if (dir === 'left') this.panNext()        // 往左滑 = 看右边的内容
+    else if (dir === 'right') this.panPrev()
   },
 
   prev() {
@@ -197,7 +249,8 @@ export default {
   closeView() {
     this.lock()
     this.viewing = false
-    this.bigSrc = ''
+    this.panTiles = []
+    this.panSrc = ''
     this.vName = ''
   },
 

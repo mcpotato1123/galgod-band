@@ -7,12 +7,12 @@
 ```
 剧本数据  5,569 个节点 / 18 章 / 44 个分块
 对话      5,457 句（全量，非删减）
-美术      136 张（背景 38 组**每组 2 块整屏图** / 立绘 55 / CG 34 **全宽 854×480** / 鉴赏缩略图 9）+ 标题画 + 图标
+美术      背景 38（**宽幅 672×480**）/ 立绘 55 / CG 34 组 **各 3 张**（左中右，共 102）/ 鉴赏缩略图 9 + 标题画 + 图标
 分支      15 个选择点，3 条结局线 + 1 个 Bad End
 CG 鉴赏   9 组 / 32 张差分图，按原作 gallery.rpy 的分组与解锁条件；大图可横向拖动看全图
 页面      7 个：主页 / 正文 / 存档 / 章节 / CG 鉴赏 / 设置 / 关于
 协议      代码 MIT（见 LICENSE）；剧本与美术资源不在 MIT 范围内（见 NOTICE.md）
-产物      dist/com.galgod.band.debug.2.3.2.rpk   8.00 MB
+产物      dist/com.galgod.band.debug.2.3.3.rpk   8.33 MB
 ```
 
 > **免责声明**：本项目是非官方的个人移植，仅供学习交流。
@@ -119,8 +119,8 @@ GalGod手环版/
 
 ```bash
 npm install                    # 只有 aiot-toolkit 一个真正的依赖
-npm run build                  # → dist/com.galgod.band.debug.2.3.2.rpk
-npm run release                # → dist/com.galgod.band.release.2.3.2.rpk（需要 sign/ 下的证书）
+npm run build                  # → dist/com.galgod.band.debug.2.3.3.rpk
+npm run release                # → dist/com.galgod.band.release.2.3.3.rpk（需要 sign/ 下的证书）
 npm run test                   # 排版 + 几何常量 + 全景参数一致性
 npm run start                  # 起模拟器预览（需要 AIoT-IDE/模拟器环境）
 ```
@@ -338,71 +338,77 @@ Ren'Py 里这两种写法含义不同，别搞混：
 > 它是写死的字符串，很容易改了 `manifest.json` 忘了改它，
 > 所以 `tools/build.js` 的构建前检查会核对两者，不一致直接**拒绝构建**。
 
-### CG：拖动看全图
+### CG：翻页看全图
 
-CG 素材是完整 16:9（**854×480**），比屏幕（336）宽得多，所以鉴赏页把它放进
-**横向 `<scrollview>`**，左右拖动就能看到原本被裁掉的两侧：
+CG 素材是完整 16:9，在素材侧就被**预切成 3 张整屏图**（左 / 中 / 右）：
 
-```html
-<scrollview class="sv" scroll-direction="horizontal" show-scrollbar="false">
-  <image class="big" src="{{bigSrc}}"></image>
-</scrollview>
+| 文件 | 内容 |
+|---|---|
+| `<name>.png` | **中间**那张。剧情正文用它 + `object-fit: cover`，正好等于老的居中裁切观感 |
+| `<name>_l.png` | 最左 |
+| `<name>_r.png` | 最右 |
+
+运行时按 `_l` / `_r` 后缀推路径（不查表），鉴赏页用 `onswipe` 或**点画面左右两侧**
+在这 3 张之间翻页，就能看到原本被裁掉的部分。
+
+- 同一组的**差分图用底部的 `‹` `›` 切换**。滑动手势是留给「看全图」的，不抢这个操作
+- `panIdx` 默认停在**中间**那张，所以一打开就是惯常的构图
+
+> #### ⚠️ 为什么不用横向 `scrollview`
+>
+> 2.3.1 用的是 `<scrollview scroll-direction="horizontal">` + 一张 854 宽的图，
+> **真机上完全拖不动**。
+>
+> 当时的判断是"根节点的 `onswipe="ban"` 把手势吃掉了"，去掉之后**依然拖不动** ——
+> 说明 `scrollview` 的拖动在这个运行时上就是不响应
+> （章节页的 `<list>` 能滚，是因为 `list` 在更底层接管了手势）。
+>
+> 所以改成：**预切图 + `onswipe` + `onclick`**。
+> 这三个原语在所有页面都已验证可用，不依赖任何"组件自己会处理手势"的假设。
+
+### 全景背景：定时器逐帧推进 `left`
+
+背景是一张 **672 宽的宽图**（比屏幕宽 336），运行时用 `setInterval`
+每 `BG_TICK_MS` 把 `left` 推进 `BG_STEP_PX`：
+
+```
+BG_STEP_PX = 4px，BG_TICK_MS = 100ms  →  40px/s，扫完 336px 约 8.4 秒
+走到头就反向，来回扫。
 ```
 
-- 同一组的**差分图用 `‹` `›` 按钮切换**。拖动手势是留给「看全图」的，不抢这个操作
-- 剧情正文里同一个素材靠 `object-fit: cover` 自动居中裁成满屏，不影响正文观感——
-  **一份素材两处用**
-- CG 之前是裁成 336×480 的，两侧内容直接丢掉了；现在出全宽，
-  调色板相应从 128 降到 64 控制体积
-
-> #### ⚠️ 坑：根节点挂 `onswipe` 会把拖动手势整个吃掉
->
-> 这个页面的根 `<div class="page">` 原来有 `onswipe="ban"`（本意是屏蔽误触滑动），
-> 结果横向 `scrollview` 收不到拖动，**CG 完全拖不动**。
->
-> 章节页的 `<list>` 在同款外层下能正常滚动，是因为 `list` 在更底层就接管了手势；
-> `scrollview` 不行。
->
-> 现在根节点不再挂 `onswipe`（这个页面本来也没有需要屏蔽的滑动手势），
-> `npm run test` 加了检查防止它被加回来。
-
-### 全景背景：定时器换 `src`
-
-背景自动"扫"的实现，是**每 `BG_STEP_MS` 把 `<image>` 的 `src` 换成下一张预切图块**，
-两张图块轮流出现。
-
-素材侧（`tools/gen_assets.py`）：把原图取景成 `336 × BG_TILES` 宽的宽幅，
-再**预切成 BG_TILES 张 336×480**。第 0 张写到 `assets.json` 的 `out` 里
-（索引表只认这一张，下标才不会错位），其余写成 `<name>_r.png`、`<name>_r2.png`。
-运行时按后缀推路径，不用查表。
-
-**为什么做得这么"土"**：前面两条更聪明的路，真机上都失败了。
+**为什么不用更"聪明"的办法**：一共试了三条路，前两条真机都失败。
 
 | 方案 | 真机结果 |
 |---|---|
-| ① 宽图（504）+ `left` + CSS `transition` 平移 | ❌ 画面中间一道**竖向接缝**，位置正好等于平移距离（168px），疑似过渡中间态被渲染成两个位置叠加 |
-| ② 预切整屏图块 + `<swiper autoplay>` 轮播 | ❌ **幻灯片不贴合**（中间留黑带，能同时看到两张的一角和中间的空隙），另一张照片里**整个画面被放大** |
-| ③ **定时器换 `src`**（当前） | 只用 `<image>` 的 `src`、`object-fit`、`setTimeout`——**这三个都已在真机上验证可用** |
+| ① 宽图 + `left` + CSS `transition` 平移 | ❌ 画面中间一道**竖向接缝**，位置正好等于平移距离（168px），疑似过渡中间态被渲染成两个位置叠加 |
+| ② 预切整屏图块 + `<swiper autoplay>` 轮播 | ❌ **幻灯片不贴合**（中间留黑带），另一张照片里**整个画面被放大** |
+| ③ 预切图块 + 定时器换 `src` | ⚠️ 能用，但**是硬切**——每 7 秒画面直接跳一下，观感很生硬 |
+| ④ **定时器逐帧推进 `left`**（当前） | `left` 本身是能正确渲染的（方案 ① 里画面位置就是对的，坏的只是 `transition` 补间），所以自己按固定间隔小步推进 |
 
-**代价说清楚：③ 是硬切，不是平滑推移。** 视觉上是两张画面每 7 秒交替一次
-（像镜头的切换），而不是镜头缓缓横移。
-想要真正的平滑推移，需要这个运行时支持 `transition` 或 `swiper`——
-目前两个都不可靠。**宁可要一个能用的硬切，也不要一个花屏的平滑。**
+**④ 的取舍**：这是 10fps 的离散推进，不是真正的逐帧动画，但**没有任何补间**，
+所以不会出现方案 ① 的重影/接缝。步子再小也不会更顺（受限于 10fps），
+再大就会看出跳。
 
-**体积代价**：背景每张要出 `BG_TILES` 块，块数翻倍体积就翻倍。
-调色板因此从 128 收到 **96** 留余量（真机实测的图片预算是 < 9 MB）：
+> `npm run test` 会断言 `.bgwide` 上**不许出现 `transition` / `animation`**——
+> 这是真机上验证过的坑，不能靠"看起来更优雅"改回去。
 
-| | 2.2 | 2.3.2 |
+**体积代价**：背景出 672 宽（2 倍像素）、CG 出 3 张，
+调色板相应收到 `BG_COLORS=80` / `CG_COLORS=56` 留余量
+（真机实测的图片预算是 < 9 MB）：
+
+| | 2.2 | 2.3.3 |
 |---|---|---|
-| 背景 | 336×480 ×38，1.98 MB | **336×480 ×76（两块），3.64 MB** |
-| CG | 336×480 ×34，1.87 MB | **854×480 ×34，3.45 MB** |
-| 图片合计 | 4.38 MB | **7.66 MB** |
-| rpk | 4.77 MB | **8.00 MB** |
+| 背景 | 336×480 ×38，1.98 MB | **672×480 ×38，3.23 MB** |
+| CG | 336×480 ×34，1.87 MB | **336×480 ×102（每组 3 张），4.18 MB** |
+| 图片合计 | 4.38 MB | **7.98 MB** |
+| rpk | 4.77 MB | **8.33 MB** |
 
-嫌大：把 `tools/gen_assets.py` 的 `BG_TILES` 改成 1（不平移，背景减半）、
+嫌大：`tools/gen_assets.py` 里
+`BG_W` 改成 336（背景不动，省一半）、`CG_TILES` 改成 1（只有中间那张）、
 或把 `BG_COLORS` / `CG_COLORS` 再降一档。
-改 `BG_TILES` 必须同步改 `game.ux` 的 `BG_TILE_COUNT`；改 `CG_W` 必须同步改
-`cg.ux` 里 `.big` 的 `width`——**`npm run test` 会核对这几处，改一半直接报错**。
+改 `BG_W` 必须同步改 `game.ux` 的 `BG_W` 与 CSS `.bgwide` 的宽；改 `CG_W` / `CG_TILES`
+必须同步改 `game.ux` 和 `cg.ux` 里对应的地方——**`npm run test` 会核对这几处，
+改一半直接报错**。
 
 ### 屏幕常亮
 
@@ -642,9 +648,9 @@ readChunk(chunk, done) {
 | 构建前静态检查 | `tools/build.js` 的 `preflight()` | 拦住 `data` 与 `protected` 共存、并警告顶层字面量属性；已用故意违规的探针页面验证过确实会拦截 |
 | 剧本完整性 | `tools/validate_story.py` | 44 块覆盖 5569 节点无空洞；**全图可达 5569/5569**；无越界引用 |
 | 剧情流程 | `tools/simulate.py`（复刻 `game.ux` 的 `step()`/`onTap()` 语义跑真实数据） | 8 条策略全部正常收尾；**三条结局线 + Bad End 全部可达**；单周目不串结局 |
-| 工程可构建 | `npm run build` | 编译通过，rpk 8.00 MB，249 条目 / 176 PNG / 44 剧本块，**无 JPEG**（真机解码 JPEG 不可靠） |
+| 工程可构建 | `npm run build` | 编译通过，rpk 8.33 MB，279 条目 / 206 PNG / 44 剧本块，**无 JPEG**（真机解码 JPEG 不可靠） |
 | 运行时分页 | `npm run test`（`tools/test_paginate.js`） | 把 `reader.js` 的 `wrapText()`/`paginateText()` 与 `game.ux` 的 `layout()` **源码原文**抠出来执行，字号 14~30 逐个跑全剧本 5457 句：不超行、不超页、不丢字、不压 `▼`；并核对几何常量与 CSS 一致、关于页 `CPL × 字号 ≤ 行宽` |
-| 全景背景 / CG 全图 | `npm run test` | 核对 `gen_assets.BG_TILES` == `game.ux.BG_TILE_COUNT`、`gen_assets.CG_W` == `cg.ux` 里 `.big` 的宽度、swiper 与幻灯片的 CSS 尺寸 == 屏幕尺寸；并检查 38 × 2 块背景图**全部存在、无重名**（派生名是纯字符串拼接，撞名会静默覆盖） |
+| 全景背景 / CG 全图 | `npm run test` | 核对 `gen_assets.BG_W` == `game.ux.BG_W` == CSS `.bgwide` 宽、`BG_PAN_RANGE` == `BG_W - 屏幕宽`；并断言 `.bgwide` 上**不许出现 `transition`/`animation`**、`game.ux` 里**不许有 `swiper` 或"换 src"那版的残留**、`cg.ux` 里**不许有 `scrollview`**、根节点不许挂 `onswipe`；再检查 34 组 CG × 3 张与 38 张背景宽图**全部存在且无重名**。检查前会先剥掉注释，否则注释里写的「为什么不用它」会误报 |
 | 版本号一致性 | `tools/build.js` 的 `preflight()` | 核对 `about.ux` 的 `APP_VER` 与 `manifest.json` 的 `versionName`，不一致直接拒绝构建 |
 | 导出目录可独立构建 | 把 `galgod-band/` 复制出去单独 `npm run build` | 产出与主工程完全一致 |
 | 上传前自检 | `tools/check_encoding.py` | 全部文本文件合法 UTF-8、无误传文件、README 引用的图片都在 |
@@ -661,13 +667,14 @@ readChunk(chunk, done) {
   它**不能把 `value` 绑成实时值**（会变成受控组件、拖动被弹回），也**不能加 `onswipe`**
   （拖动本身就是 swipe 手势）。改完还没上机验证；即使滑块不可用，
   旁边的 **−／＋ 步进按钮**是普通 `div` + `onclick`，一定能用
-- **`<scrollview scroll-direction="horizontal">`（2.3）**：CG 全图的横向拖动看的就是它。
-  2.3.1 上拖不动，原因是页面根节点的 `onswipe="ban"` 把手势吃掉了，2.3.2 已去掉；
-  **但去掉之后能否真的拖动仍未上机验证**
-- **背景的换 `src` 播放（2.3.2）**：只用 `<image>` 的 `src` + `setTimeout`，
-  这两样都已验证可用，所以失败概率很低。**但它视觉上是硬切（每 7 秒换一张），
-  不是平滑推移**——追求平滑就得让运行时支持 `transition` 或 `swiper`，
-  目前两个都不可靠
+- **CG 的翻页看全图（2.3.3）**：预切 3 张 + `onswipe` + 点击左右热区。
+  前两个原语在所有页面都已验证可用，**但 `onswipe` 挂在 `<image>` 上能否触发没验证过**
+  ——所以额外加了**点击热区兜底**（`div` + `onclick`，百分百可用）。
+  两条路任意一条通，就能看全图
+- **背景逐帧推进 `left`（2.3.3）**：`left` 已证明能正确渲染（方案 ① 里画面位置是对的），
+  坏的是 `transition` 补间，所以这版完全不碰补间。
+  仍是 10fps 的离散推进，**步长 4px 是真机上肉眼可接受的折中**——
+  如果看起来还是"一格一格跳"，把 `BG_STEP_PX` 调到 2 会更细但更慢
 - **`@system.brightness` 的 `setKeepScreenOn`（2.3）**：接口写法来自另一个
   已编译的 Vela 应用，可以确认；但本机固件是否放行未验证。已包 `try/catch`，
   失败只是不常亮，不会影响阅读
@@ -699,12 +706,14 @@ readChunk(chunk, done) {
 - 想改字号/速度的调节范围：`src/common/reader.js` 的 `SIZE_MIN/MAX`、`SPEED_MIN/MAX`、`AUTO_MIN/MAX`
 - 想改画质与体积：`tools/gen_assets.py` 里的 `BG_COLORS` / `SP_COLORS` / `CG_COLORS` 与 `SPRITE_W`/`SPRITE_H`
   （改 `SPRITE_W`/`SPRITE_H` 必须同步改 `src/pages/game/game.ux` 里 `.sp` 的宽高与三个槽位的 `left`）
-- 想改全景背景的扫描范围/节奏：改 `tools/gen_assets.py` 的 **`BG_TILES`**
-  （1 = 不平移、背景体积减半；2 = 当前；3 = 扫得更宽但背景再涨 50%），
-  同步改 `game.ux` 的 `BG_TILE_COUNT`，节奏改 `BG_STEP_MS`。
-  **`npm run test` 会核对这几处并检查图块是否齐全、有没有撞名**
-- 想改 CG 全图的取景宽度：改 `tools/gen_assets.py` 的 **`CG_W`**，
-  同步改 `src/pages/cg/cg.ux` 里 `.big` 的 `width`（`npm run test` 会核对）
+- 想改全景背景的范围/速度：改 `tools/gen_assets.py` 的 **`BG_W`**
+  （336 = 不平移且背景体积减半；672 = 当前，可平移 336px），
+  同步改 `game.ux` 的 `BG_W` 与 CSS `.bgwide` 的宽；
+  速度改 `game.ux` 的 `BG_STEP_PX`（每帧步长）与 `BG_TICK_MS`（帧间隔）。
+  **`npm run test` 会核对这几处，并断言 `.bgwide` 上没有出现 `transition`/`animation`**
+- 想改 CG 全图：改 `tools/gen_assets.py` 的 **`CG_W`**（取景宽度）与 **`CG_TILES`**
+  （切几张，1 = 只有中间那张）。改完重跑 `gen_assets.py` 即可，
+  运行时的后缀推导是自动的；`npm run test` 会核对图块是否齐全、有没有撞名
 - 想改章节标题：`tools/gen_story.py` 的 `CHAPTER_TITLES`
 - 想加/减 CG 鉴赏分组：`tools/gen_story.py` 的 `GALLERY`
 - 想改哪些章节不进「章节选择」：`tools/gen_story.py` 的 `CHAPTER_HIDE` / `CHAPTER_NEED_CLEAR`

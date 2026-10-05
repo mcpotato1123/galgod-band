@@ -2,8 +2,8 @@
   "package": "com.galgod.band",
   "name": "GalGod",
   "icon": "/common/icon.png",
-  "versionName": "2.3.2",
-  "versionCode": 17,
+  "versionName": "2.3.3",
+  "versionCode": 18,
   "minPlatformVersion": 1100,
   "deviceTypeList": ["watch"],
   "features": [

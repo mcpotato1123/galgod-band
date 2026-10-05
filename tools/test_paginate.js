@@ -100,64 +100,97 @@ console.log('几何常量与 CSS 一致 ✔  ' +
   NAMES.map((n) => n + '=' + geom[n]).join(' ') + ' MORE_TOP=' + geom.MORE_TOP);
 
 // ---- 全景背景 / CG 全图：几处跨文件约束，特别容易只改一半
+//      这两个功能一路上踩了三次坑（left+transition 出接缝、swiper 幻灯片不贴合、
+//      scrollview 拖不动），所以把每个"不许再出现"的写法都做成断言。
 const genAssets = path.join(proj, 'tools', 'gen_assets.py');
 if (fs.existsSync(genAssets)) {
   const ga = fs.readFileSync(genAssets, 'utf8');
-  const num = (re, src) => { const m = src.match(re); return m ? Number(m[1]) : null; };
+  const num = (re, s) => { const m = s.match(re); return m ? Number(m[1]) : null; };
   const bad = [];
+
+  // "不许再出现"这类检查必须**先剥掉注释**再看，否则注释里提到 swiper / scrollview
+  // 就会误报（这些文件里恰好写了大段"为什么不用它"的说明）。
+  // 剥 // 时要避开 https:// 里的双斜杠。
+  const stripComments = (t) => t
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+  const code = stripComments(src);
 
   const scrW = num(/^SCREEN_W,\s*SCREEN_H\s*=\s*(\d+)/m, ga);
   const scrH = num(/^SCREEN_W,\s*SCREEN_H\s*=\s*\d+,\s*(\d+)/m, ga);
-  const bgTiles = num(/^BG_TILES\s*=\s*(\d+)/m, ga);
+  const bgW = num(/^BG_W\s*=\s*(\d+)/m, ga);
   const cgW = num(/^CG_W\s*=\s*(\d+)/m, ga);
-  const gameTileCount = num(/const BG_TILE_COUNT\s*=\s*(\d+)/, src);
+  const cgTiles = num(/^CG_TILES\s*=\s*(\d+)/m, ga);
 
-  if (scrW === null || scrH === null || bgTiles === null || cgW === null) {
-    console.error('✖ gen_assets.py 里读不到 SCREEN_W / SCREEN_H / BG_TILES / CG_W');
+  if (scrW === null || scrH === null || bgW === null || cgW === null || cgTiles === null) {
+    console.error('✖ gen_assets.py 里读不到 SCREEN_W / SCREEN_H / BG_W / CG_W / CG_TILES');
     process.exit(1);
   }
-  if (gameTileCount !== bgTiles) {
-    bad.push('gen_assets.BG_TILES(' + bgTiles + ') ≠ game.ux 的 BG_TILE_COUNT(' +
-      gameTileCount + ')：素材会多切或少切，运行时拼不出完整背景');
+
+  // ---- 背景是「一张宽图 + 定时器推进 left」，不许再出现前世的各种写法
+  const gameBgW = num(/const BG_W\s*=\s*(\d+)/, code);
+  const gameRange = num(/const BG_PAN_RANGE\s*=\s*BG_W\s*-\s*(\d+)/, code);
+  const cssBgW = num(/\.bgwide \{[^}]*?width:\s*(\d+)px/, code);
+  if (gameBgW !== bgW) {
+    bad.push('game.ux 的 BG_W(' + gameBgW + ') ≠ gen_assets.BG_W(' + bgW +
+      ')：素材宽度对不上，平移会露边或走不满');
   }
+  if (cssBgW !== bgW) {
+    bad.push('CSS .bgwide width(' + cssBgW + ') ≠ BG_W(' + bgW + ')');
+  }
+  if (gameRange !== scrW) {
+    bad.push('game.ux 的 BG_PAN_RANGE 是用 BG_W - ' + gameRange + ' 算的，' +
+      '应该减屏幕宽 ' + scrW);
+  }
+  if (!/const BG_STEP_PX\s*=\s*\d+/.test(code) || !/const BG_TICK_MS\s*=\s*\d+/.test(code)) {
+    bad.push('game.ux 缺少 BG_STEP_PX / BG_TICK_MS（逐帧推进的步长与间隔）');
+  }
+  // 真机上踩过：给宽图加 transition 会在画面中间渲染出竖向接缝（位置等于平移距离）
+  const bgwideBlock = (code.match(/\.bgwide \{[^}]*\}/) || [''])[0];
+  if (/transition|animation/.test(bgwideBlock)) {
+    bad.push('CSS .bgwide 上出现了 transition/animation：' +
+      '真机实测会给宽图渲染出接缝，背景必须靠定时器逐帧推进 left');
+  }
+  if (/<swiper/.test(code) || /\.bgsw\s*\{/.test(code) || /\.bgslide\s*\{/.test(code)) {
+    bad.push('game.ux 里还有 swiper 背景的痕迹：真机实测幻灯片不贴合（中间留黑带）' +
+      '且画面被放大');
+  }
+  if (/buildBgFrames|startBgSwap|BG_TILE_COUNT/.test(code)) {
+    bad.push('game.ux 里还有「轮换背景 src」那版的残留代码');
+  }
+  if (!/startBgPan/.test(code) || !/bgPanTick/.test(code)) {
+    bad.push('game.ux 里找不到 startBgPan / bgPanTick（背景平移的核心）');
+  }
+
+  // ---- CG 靠「预切 3 张 + onswipe/点击翻页」，不许再用横向 scrollview
   if (cgW <= scrW) {
-    bad.push('CG_W(' + cgW + ') 必须大于屏幕宽(' + scrW + ')，否则横向滚动没有内容可看');
+    bad.push('CG_W(' + cgW + ') 必须大于屏幕宽(' + scrW + ')，否则没有可翻的横向内容');
   }
-
-  // game.ux 里背景图必须是静态铺满的 <image>（见下），不再有任何轮播容器
-  if (/<swiper[^>]*bgsw/.test(src) || /\.bgsw\s*\{/.test(src) || /\.bgslide\s*\{/.test(src)) {
-    bad.push('game.ux 里还留着 swiper 轮播背景的痕迹；真机实测 swiper 幻灯片不贴合' +
-      '（中间留黑带）且画面被放大，已改回「定时器换 src」');
+  if (cgTiles < 2) {
+    bad.push('CG_TILES(' + cgTiles + ') 小于 2，等于没有全图可看');
   }
-  if (!/const BG_STEP_MS\s*=\s*\d+/.test(src)) {
-    bad.push('game.ux 里找不到 BG_STEP_MS（背景换图的间隔）');
-  }
-  if (!/buildBgFrames/.test(src)) {
-    bad.push('game.ux 里找不到 buildBgFrames（拼背景图块路径的函数）');
-  }
-
-  // cg.ux 里那张全图 CG 的宽度
   const cgPath = path.join(proj, 'src', 'pages', 'cg', 'cg.ux');
   if (fs.existsSync(cgPath)) {
-    const cgSrc = fs.readFileSync(cgPath, 'utf8');
-    const bigW = num(/\.big \{[^}]*?width:\s*(\d+)px/, cgSrc);
-    const bigH = num(/\.big \{[^}]*?height:\s*(\d+)px/, cgSrc);
-    if (bigW !== cgW) {
-      bad.push('cg.ux 的 .big width(' + bigW + ') ≠ gen_assets.CG_W(' + cgW +
-        ')：图会被拉伸或裁掉');
+    const cgCode = stripComments(fs.readFileSync(cgPath, 'utf8'));
+    if (/scrollview/.test(cgCode)) {
+      bad.push('cg.ux 里还在用 scrollview：真机实测它的拖动完全不响应');
     }
-    if (bigH !== scrH) {
-      bad.push('cg.ux 的 .big height(' + bigH + ') ≠ 屏幕高(' + scrH + ')');
+    if (!/onswipe="onPanSwipe"/.test(cgCode)) {
+      bad.push('cg.ux 的大图没有挂 onswipe="onPanSwipe"（滑动翻页失效）');
     }
-    if (!/scroll-direction="horizontal"/.test(cgSrc)) {
-      bad.push('cg.ux 的滚动容器不是横向的（缺 scroll-direction="horizontal"），拖动将看不了全图');
+    if (!/onclick="panPrev"/.test(cgCode) || !/onclick="panNext"/.test(cgCode)) {
+      bad.push('cg.ux 缺少点击翻页的保底热区（panPrev / panNext）');
     }
-    // 真机上踩过：根节点挂 onswipe="ban" 会把拖动手势整个吃掉，scrollview 收不到拖动。
-    // 章节页的 <list> 能滚是因为 list 在更底层接管手势，scrollview 不行。
-    const rootTag = (cgSrc.match(/<div class="page"[^>]*>/) || [''])[0];
+    // 根节点挂 onswipe 会把手势吃掉（2.3.1 上 CG 拖不动就是这个）
+    const rootTag = (cgCode.match(/<div class="page"[^>]*>/) || [''])[0];
     if (/onswipe/.test(rootTag)) {
-      bad.push('cg.ux 根节点挂了 onswipe（' + rootTag.trim() + '）：' +
-        '会把拖动手势吃掉，CG 横向拖动会失效');
+      bad.push('cg.ux 根节点挂了 onswipe（' + rootTag.trim() + '）：会把滑动手势吃掉');
+    }
+    const bigW = num(/\.big \{[^}]*?width:\s*(\d+)px/, cgCode);
+    if (bigW !== scrW) {
+      bad.push('cg.ux 的 .big width(' + bigW + ') 应该是屏幕宽 ' + scrW +
+        '（每张预切图本身就是整屏大小）');
     }
   }
 
@@ -165,47 +198,57 @@ if (fs.existsSync(genAssets)) {
     console.error('✖ 全景背景 / CG 全图 参数不一致：\n    ' + bad.join('\n    '));
     process.exit(1);
   }
-  console.log('全景背景 ✔  BG_TILES=' + bgTiles + ' 图块 ' + scrW + 'x' + scrH +
-    '；CG 全图 ✔ ' + cgW + 'x' + scrH + ' 横向滚动');
+  console.log('全景背景 ✔  BG_W=' + bgW + ' 平移 ' + (bgW - scrW) + 'px（定时器逐帧推进 left）' +
+    '；CG 全图 ✔ 预切 ' + cgTiles + ' 张 ' + scrW + 'x' + scrH + '（onswipe + 点击翻页）');
 
-  // 背景第 2..N 块是靠 <name>_r.png 后缀推出来的（运行时不查表，纯字符串拼接），
-  // 所以「背景名本身不能以 _r / _r2 … 结尾」，否则派生名会撞上别的背景。
+  // ---- 派生文件名是纯字符串拼接（运行时不查表），必须齐全且不能撞名
   const assetsPath = path.join(proj, 'src', 'common', 'assets.js');
   if (fs.existsSync(assetsPath)) {
     const ap = fs.readFileSync(assetsPath, 'utf8');
-    const bgs = (ap.match(/"[^"]*\/b\/[^"]+"/g) || []).map((x) => x.slice(1, -1));
-    const names = bgs.map((p) => path.basename(p).replace(/\.[^.]+$/, ''));
-    const clash = [];
-    for (let t = 1; t < bgTiles; t++) {
-      const suffix = t === 1 ? '_r' : ('_r' + t);
-      for (const n of names) {
-        if (n.endsWith(suffix)) clash.push(n + ' 以 ' + suffix + ' 结尾');
-      }
-    }
-    if (clash.length) {
-      console.error('✖ 背景名与派生后缀冲突（会让第 2..N 块覆盖别的背景）：\n    ' +
-        clash.join('\n    '));
-      process.exit(1);
-    }
-    // 派生出来的文件必须真的存在
     const cssDir = path.join(proj, 'src', 'common');
-    const missing = [];
-    for (const p of bgs) {
-      for (let t = 1; t < bgTiles; t++) {
-        const suffix = t === 1 ? '_r' : ('_r' + t);
-        const f = path.join(cssDir, p.replace('/common/', '').replace(/\.[^.]+$/, '')
-          .split('/').join(path.sep) + suffix + path.extname(p));
-        if (!fs.existsSync(f)) missing.push(path.basename(f));
+    const toFs = (p) => path.join(cssDir, p.replace('/common/', '').split('/').join(path.sep));
+
+    const check = (list, suffixes, label) => {
+      const names = list.map((p) => path.basename(p).replace(/\.[^.]+$/, ''));
+      const clash = [];
+      for (const suf of suffixes) {
+        for (const n of names) {
+          if (n.endsWith(suf)) clash.push(n + ' 以 ' + suf + ' 结尾');
+        }
       }
-    }
-    if (missing.length) {
-      console.error('✖ 背景第 2..N 块缺失（运行时会出现空白背景）：\n    ' +
-        missing.slice(0, 8).join('\n    ') +
-        (missing.length > 8 ? '\n    ...共 ' + missing.length + ' 个' : ''));
+      if (clash.length) {
+        console.error('✖ ' + label + '名与派生后缀冲突（会静默覆盖别的文件）：\n    ' +
+          clash.join('\n    '));
+        process.exit(1);
+      }
+      const missing = [];
+      for (const p of list) {
+        for (const suf of suffixes) {
+          const f = toFs(p).replace(/\.[^.]+$/, '') + suf + path.extname(p);
+          if (!fs.existsSync(f)) missing.push(path.basename(f));
+        }
+      }
+      if (missing.length) {
+        console.error('✖ ' + label + '派生文件缺失 ' + missing.length + ' 个' +
+          '（运行时会出现空白画面）：\n    ' + missing.slice(0, 8).join('\n    '));
+        process.exit(1);
+      }
+      return names.length;
+    };
+
+    const cgs = (ap.match(/"[^"]*\/c\/[^"]+"/g) || []).map((x) => x.slice(1, -1));
+    const nCg = check(cgs, ['_l', '_r'], 'CG');
+    console.log('CG 全图图块 ✔  ' + nCg + ' 组 × ' + cgTiles + ' 张，全部存在且无重名');
+
+    // 背景现在是「一张宽图」，索引表里那张就是最终产物，没有派生文件要查
+    const bgs = (ap.match(/"[^"]*\/b\/[^"]+"/g) || []).map((x) => x.slice(1, -1));
+    const bgMissing = bgs.filter((p) => !fs.existsSync(toFs(p)));
+    if (bgMissing.length) {
+      console.error('✖ 背景文件缺失 ' + bgMissing.length + ' 个:\n    ' +
+        bgMissing.slice(0, 6).join('\n    '));
       process.exit(1);
     }
-    console.log('背景图块 ✔  ' + bgs.length + ' 个背景 × ' + bgTiles +
-      ' 块，全部存在且无重名');
+    console.log('背景素材 ✔  ' + bgs.length + ' 张宽图全部存在');
   }
 }
 
