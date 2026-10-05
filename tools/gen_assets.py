@@ -56,6 +56,10 @@ CG_COLORS = 56
 THUMB_W, THUMB_H = 96, 54      # CG 鉴赏缩略图（16:9）
 THUMB_COLORS = 64
 
+# 主页真正露出来的画面区高度：下面 240 被 index.ux 的按钮面板盖住。
+# 必须与 index.ux 里 .panel 的 top 一致（npm run test 会核对）。
+HOME_TOP_H = 240
+
 
 def cover(im, w, h, bias_y=0.5):
     """等比缩放到刚好覆盖 w x h，然后居中裁剪"""
@@ -178,11 +182,37 @@ def main(raw_dir, proj):
                          THUMB_COLORS, alpha=False)
             total += os.path.getsize(os.path.join(thumb_dir, "g%d.png" % gi))
 
-    # 标题画与图标
+    # 主页画
+    # 用户指定的构图就是原图按 **3:2 居中裁切**（和 Steam 头图一致），
+    # 也就是「logo 锁排在左、女孩在右」那张。
+    #
+    # 关键：主页真正露出来的画面区只有**上面 336x240**（下面 240 被按钮面板盖住），
+    # 而 3:2 裁切是 1.5:1、336x240 是 1.4:1，两者几乎一致 ——
+    # 所以整张构图能几乎完整地铺进去，两边都不丢。
     title_src = os.path.join(raw_dir, "images", "cg", "main_screen.avif")
     if os.path.isfile(title_src):
-        im = cover(Image.open(title_src), SCREEN_W, SCREEN_H, bias_y=0.5)
-        save_palette(im, os.path.join(common, "home.png"), 96, alpha=False)
+        art = Image.open(title_src).convert("RGB")
+        aw, ah = art.size                          # 1920x1080
+        cw = int(round(ah * 1.5))                  # 1620，3:2
+        x0 = (aw - cw) // 2
+        art = art.crop((x0, 0, x0 + cw, ah))
+        # 按**宽度**完整铺下（不做 cover 裁切）：3:2 的图铺进 336 宽正好是 336x224，
+        # 比画面区 240 只差 16px，用渐变补掉就行。
+        # 用 cover 会裁掉两侧 —— logo 会被切（试过，用户要的正是 logo 在左的完整构图）。
+        fit_h = int(round(SCREEN_W * ah / float(cw)))
+        top = art.resize((SCREEN_W, fit_h), Image.LANCZOS)
+
+        canvas = Image.new("RGB", (SCREEN_W, SCREEN_H), (13, 9, 16))
+        canvas.paste(top, (0, 0))
+        # 画面区下面接一段渐变收进底色：
+        # 面板是 rgba(21,15,25,0.94)，留一点点透出来的话不能是硬边。
+        edge = top.crop((0, fit_h - 1, SCREEN_W, fit_h))
+        dark = Image.new("RGB", (SCREEN_W, 1), (13, 9, 16))
+        span = float(SCREEN_H - fit_h)
+        for y in range(fit_h, SCREEN_H):
+            t = min(1.0, ((y - fit_h) / span) * 1.5)
+            canvas.paste(Image.blend(edge, dark, t), (0, y))
+        save_palette(canvas, os.path.join(common, "home.png"), 96, alpha=False)
         total += os.path.getsize(os.path.join(common, "home.png"))
 
     moon = os.path.join(raw_dir, "images", "bg", "moon.avif")

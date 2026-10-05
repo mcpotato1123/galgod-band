@@ -3,11 +3,6 @@
     <image class="bg" src="/common/home.png"></image>
     <div class="shade"></div>
 
-    <div class="head">
-      <text class="title">GalGod</text>
-      <text class="sub">想成为Galgame领域大神！！！</text>
-    </div>
-
     <div class="panel">
       <text class="resume" if="{{hasAuto}}">最近进度 · {{autoText}}</text>
       <text class="resume" if="{{!hasAuto}}">还没有存档，从序章开始吧</text>
@@ -35,9 +30,9 @@
   .shade { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
            background-color: rgba(13, 9, 16, 0.34); }
 
-  .head { position: absolute; top: 54px; left: 0px; width: 336px; flex-direction: column; align-items: center; }
-  .title { font-size: 46px; color: #ffe9f1; font-weight: bold; }
-  .sub { font-size: 17px; color: #d6bcc8; margin-top: 6px; }
+  /* 主页顶部的 "GalGod" + 副标题文字已删掉：
+     现在 home.png 里就是原图那张「logo 在左、女孩在右」的完整构图，
+     再叠一行文字会把它盖住、而且内容重复。 */
 
   .panel { position: absolute; top: 240px; left: 0px; width: 336px; height: 240px;
            background-color: rgba(21, 15, 25, 0.94); flex-direction: column;

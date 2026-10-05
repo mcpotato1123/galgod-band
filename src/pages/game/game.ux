@@ -82,12 +82,16 @@
 </template>
 
 <style>
+  /* overflow:hidden 是必须的：背景图有 672 宽，是屏幕的两倍。
+     不裁住的话运行时会把这个页面当成"内容比视口宽"的横向可滚动区域，
+     玩家一拖就把整个背景拖走（真机上出现过这个现象）。 */
   .page {
     width: 336px;
     height: 480px;
     background-color: #000000;
     flex-direction: column;
     position: relative;
+    overflow: hidden;
   }
 
   .layer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; object-fit: cover; }

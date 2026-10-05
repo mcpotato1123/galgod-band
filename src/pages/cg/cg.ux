@@ -70,7 +70,9 @@
   .card { width: 312px; height: 74px; margin-left: 12px; margin-top: 6px; border-radius: 16px;
           background-color: #241c2c; flex-direction: row; align-items: center;
           padding-left: 10px; padding-right: 14px; }
-  .thumb { width: 96px; height: 54px; border-radius: 8px; }
+  /* object-fit 是防呆：Vela 的 <image> 默认按原始像素尺寸画，
+     源图尺寸万一和框不一致就会只占一块。现在两者都是 96x54，写上是保险。 */
+  .thumb { width: 96px; height: 54px; border-radius: 8px; object-fit: cover; }
   .lock { width: 96px; height: 54px; border-radius: 8px; background-color: #191320;
           align-items: center; justify-content: center; }
   .lock-t { font-size: 26px; color: #4c4055; }
@@ -130,6 +132,12 @@ import { loadSeen } from '../../common/reader.js'
 const CG_W = 854
 const CG_PAN_RANGE = CG_W - 336        // 可拖动的总距离
 const CG_PAN_STEP = Math.round(CG_PAN_RANGE / 3)   // 点击/滑动兜底时一次走多远
+
+// 拖动放大倍数。
+// 屏幕只有 336 宽，手指一次最多划过一个屏宽，而可拖距离是 518px ——
+// 1:1 跟手的话一次只能拖 65%，划到屏幕边缘就"拖不动"了（真机反馈过）。
+// 放大到 1.8 倍，一次从最左划到最右刚好覆盖整个可拖范围。
+const CG_DRAG_GAIN = 1.8
 
 // 触摸事件的坐标字段各版本不统一，挨个试。
 // Vela 的 commonEvents 里有 touchstart/touchmove/touchend，但字段名没有文档。
@@ -256,7 +264,8 @@ export default {
     if (this.touchX === null) return
     const x = readX(e)
     if (x === null) return
-    this.setPan(this.touchLeft + (x - this.touchX))
+    // 乘上 CG_DRAG_GAIN：屏幕太窄，1:1 跟手一次拖不完整个范围
+    this.setPan(this.touchLeft + (x - this.touchX) * CG_DRAG_GAIN)
   },
 
   onCgTouchEnd() { this.touchX = null },

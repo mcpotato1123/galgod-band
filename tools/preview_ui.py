@@ -248,14 +248,12 @@ def main(raw, proj):
     panels.append((c4, "④ 阅读菜单"))
 
     # 5. 主页
+    # 顶部不再有 "GalGod" 与副标题文字：现在 home.png 本身就是原图那张
+    # 「logo 在左、女孩在右」的完整构图，再叠文字会盖住它、内容也重复。
     c5 = Image.open(px(proj, "/common/home.png")).convert("RGBA")
     shade = Image.new("RGBA", (W, H), (13, 9, 16, 87))
     c5 = Image.alpha_composite(c5, shade)
     d = ImageDraw.Draw(c5)
-    d.text((104, 54), "GalGod", font=font(FONT, 46), fill=(255, 233, 241))
-    sub = "想成为Galgame领域大神！！！"
-    d.text(((W - d.textlength(sub, font=f_small)) / 2, 116), sub,
-           font=f_small, fill=(214, 188, 200))
     d.rectangle([0, 240, W, H], fill=(21, 15, 25, 240))
     d.text((84, 252), "最近进度 · 第4章", font=f_tiny, fill=(185, 167, 179))
     for i, (txt, main, wide) in enumerate([("开始阅读", True, True), ("继续阅读", False, True)]):
@@ -403,7 +401,7 @@ def main(raw, proj):
                 font=font(FONT, 22), fill=(255, 216, 230))
         if with_dots:
             dd.text((286, 10), "···", font=font(FONT, 15), fill=(255, 158, 196))
-        sub = "GalGod · 小米手环 9 Pro 版 · v2.3"
+        sub = "GalGod · 小米手环 9 Pro 版 · v2.3.6"
         dd.text(((W - dd.textlength(sub, font=font(FONT, 12))) / 2, 36), sub,
                 font=font(FONT, 12), fill=(156, 143, 155))
         rows = [

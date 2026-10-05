@@ -57,6 +57,15 @@ geom.MORE_TOP = Number(moreM[1]);
 
 const layoutBody = extract(src, 'layout');
 
+// "不许再出现"这类检查必须**先剥掉注释**再看，否则注释里提到 swiper / scrollview
+// 就会误报（那些文件里恰好写了大段"为什么不用它"的说明）。
+// 剥 // 时要避开 https:// 里的双斜杠。
+// 定义在顶层，因为下面好几个检查块都要用。
+const stripComments = (t) => t
+  .replace(/<!--[\s\S]*?-->/g, ' ')
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+
 // 真正的换行 + 分页算法在 reader.js，正文页和关于页共用
 const wrap = extractExport(readerSrc, 'wrapText');
 const pag = extractExport(readerSrc, 'paginateText');
@@ -108,13 +117,7 @@ if (fs.existsSync(genAssets)) {
   const num = (re, s) => { const m = s.match(re); return m ? Number(m[1]) : null; };
   const bad = [];
 
-  // "不许再出现"这类检查必须**先剥掉注释**再看，否则注释里提到 swiper / scrollview
-  // 就会误报（这些文件里恰好写了大段"为什么不用它"的说明）。
-  // 剥 // 时要避开 https:// 里的双斜杠。
-  const stripComments = (t) => t
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+  // stripComments 定义在文件顶层，这里直接用
   const code = stripComments(src);
 
   const scrW = num(/^SCREEN_W,\s*SCREEN_H\s*=\s*(\d+)/m, ga);
@@ -160,6 +163,15 @@ if (fs.existsSync(genAssets)) {
   }
   if (!/startBgPan/.test(code) || !/bgPanTick/.test(code)) {
     bad.push('game.ux 里找不到 startBgPan / bgPanTick（背景平移的核心）');
+  }
+  // 真机上踩过：背景图 672 宽而页面 336 宽，页面又没 overflow:hidden，
+  // 运行时就把它当成横向可滚动区域，玩家一拖整个背景就被拖走了。
+  {
+    const pageBlock = (code.match(/\.page \{[^}]*\}/) || [''])[0];
+    if (!/overflow:\s*hidden/.test(pageBlock)) {
+      bad.push('game.ux 的 .page 没有 overflow:hidden：背景图比屏幕宽，' +
+        '运行时会把它当作横向可滚动内容，玩家一拖就把背景拖走');
+    }
   }
 
   // ---- CG 是「一张宽图 + touchmove 连续拖动」，不许再退回预切翻页 / scrollview
@@ -260,6 +272,39 @@ if (fs.existsSync(genAssets)) {
     }
     console.log('背景素材 ✔  ' + bgs.length + ' 张宽图全部存在');
   }
+}
+
+// ---- 所有页面：给定了宽高的 <image> 必须写 object-fit
+//      真机上踩过：Vela 的 <image> 默认**不缩放**，按图片原始像素尺寸绘制，
+//      没写 object-fit 的图会只占一块、其余留黑（CG 页出现过）。
+{
+  const pagesDir = path.join(proj, 'src', 'pages');
+  const offenders = [];
+  for (const pg of fs.readdirSync(pagesDir)) {
+    const f = path.join(pagesDir, pg, pg + '.ux');
+    if (!fs.existsSync(f)) continue;
+    const code2 = stripComments(fs.readFileSync(f, 'utf8'));
+    const blocks = {};
+    let mm;
+    const reBlock = /\.([a-zA-Z0-9_-]+)\s*\{([^}]*)\}/g;
+    while ((mm = reBlock.exec(code2))) blocks[mm[1]] = mm[2];
+    const reTag = /<image\b[^>]*>/g;
+    while ((mm = reTag.exec(code2))) {
+      const cm = /class="([^"]+)"/.exec(mm[0]);
+      if (!cm) continue;
+      for (const cls of cm[1].split(/\s+/)) {
+        const body = blocks[cls] || '';
+        if (!/width:\s*\d+px/.test(body) || !/height:\s*\d+px/.test(body)) continue;
+        if (!/object-fit/.test(body)) offenders.push(pg + ' .' + cls);
+      }
+    }
+  }
+  if (offenders.length) {
+    console.error('✖ 这些 <image> 给了宽高却没写 object-fit（真机上会按原始尺寸绘制）：\n    ' +
+      offenders.join('\n    '));
+    process.exit(1);
+  }
+  console.log('图片 object-fit ✔  所有给定宽高的 <image> 都写了');
 }
 
 // ---- 关于页：它把每行字数写成常量 CPL，也要核对「CPL × 字号 ≤ 行宽」
