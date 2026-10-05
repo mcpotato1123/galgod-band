@@ -7,12 +7,12 @@
 ```
 剧本数据  5,569 个节点 / 18 章 / 44 个分块
 对话      5,457 句（全量，非删减）
-美术      背景 38（**宽幅 672×480**）/ 立绘 55 / CG 34 组 **各 3 张**（左中右，共 102）/ 鉴赏缩略图 9 + 标题画 + 图标
+美术      背景 38（**宽幅 672×480**）/ 立绘 55 / CG 34 **全宽 854×480**/ 鉴赏缩略图 9 + 标题画 + 图标
 分支      15 个选择点，3 条结局线 + 1 个 Bad End
 CG 鉴赏   9 组 / 32 张差分图，按原作 gallery.rpy 的分组与解锁条件；大图可横向拖动看全图
 页面      7 个：主页 / 正文 / 存档 / 章节 / CG 鉴赏 / 设置 / 关于
 协议      代码 MIT（见 LICENSE）；剧本与美术资源不在 MIT 范围内（见 NOTICE.md）
-产物      dist/com.galgod.band.debug.2.3.3.rpk   8.33 MB
+产物      dist/com.galgod.band.debug.2.3.4.rpk   7.40 MB
 ```
 
 > **免责声明**：本项目是非官方的个人移植，仅供学习交流。
@@ -119,8 +119,8 @@ GalGod手环版/
 
 ```bash
 npm install                    # 只有 aiot-toolkit 一个真正的依赖
-npm run build                  # → dist/com.galgod.band.debug.2.3.3.rpk
-npm run release                # → dist/com.galgod.band.release.2.3.3.rpk（需要 sign/ 下的证书）
+npm run build                  # → dist/com.galgod.band.debug.2.3.4.rpk
+npm run release                # → dist/com.galgod.band.release.2.3.4.rpk（需要 sign/ 下的证书）
 npm run test                   # 排版 + 几何常量 + 全景参数一致性
 npm run start                  # 起模拟器预览（需要 AIoT-IDE/模拟器环境）
 ```
@@ -338,33 +338,46 @@ Ren'Py 里这两种写法含义不同，别搞混：
 > 它是写死的字符串，很容易改了 `manifest.json` 忘了改它，
 > 所以 `tools/build.js` 的构建前检查会核对两者，不一致直接**拒绝构建**。
 
-### CG：翻页看全图
+### CG：按住拖动看全图
 
-CG 素材是完整 16:9，在素材侧就被**预切成 3 张整屏图**（左 / 中 / 右）：
+CG 素材是完整的 16:9 宽图（**854×480**，比屏幕宽得多），放进一个
+`overflow: hidden` 的 336×480 查看器里，靠 **`touchmove` 连续拖动 `left`**
+来看被裁掉的两侧 —— 画面是**跟手连续移动**的，不是一格一格跳。
 
-| 文件 | 内容 |
-|---|---|
-| `<name>.png` | **中间**那张。剧情正文用它 + `object-fit: cover`，正好等于老的居中裁切观感 |
-| `<name>_l.png` | 最左 |
-| `<name>_r.png` | 最右 |
+```html
+<image class="big" style="{{cgStyle}}" src="{{bigSrc}}"
+       ontouchstart="onCgTouchStart" ontouchmove="onCgTouchMove"
+       ontouchend="onCgTouchEnd" ontouchcancel="onCgTouchEnd"
+       onswipe="onPanSwipe"></image>
+```
 
-运行时按 `_l` / `_r` 后缀推路径（不查表），鉴赏页用 `onswipe` 或**点画面左右两侧**
-在这 3 张之间翻页，就能看到原本被裁掉的部分。
+- `ontouchmove` 里 `left = 按下时的 left + (当前X - 按下X)`，跟随手指
+- `touchmove` 的坐标字段没有文档，`readX()` 兜了
+  `touches[0].clientX` / `pageX` / `x` / `offsetX` 以及 `changedTouches`
+- **另外两条手势同时留着做兜底**：`onswipe` 与左右点击热区（各走 1/3 距离）。
+  万一 `touchmove` 在某些固件上不派发，也还能看全图
+- 每张 CG 打开时停在**正中间**（`CG_PAN_RANGE / 2`），这是最常见的构图
+- 同一组的**差分图用底部的 `‹` `›` 切换**，和"看全图"是两套操作
 
-- 同一组的**差分图用底部的 `‹` `›` 切换**。滑动手势是留给「看全图」的，不抢这个操作
-- `panIdx` 默认停在**中间**那张，所以一打开就是惯常的构图
-
-> #### ⚠️ 为什么不用横向 `scrollview`
+> #### ⚠️ 坑一：`<image>` 不写 `object-fit` 会按原始尺寸画
 >
-> 2.3.1 用的是 `<scrollview scroll-direction="horizontal">` + 一张 854 宽的图，
-> **真机上完全拖不动**。
+> 2.3.3 上出现过「CG 只占屏幕左边约 45%、右边全黑」。图块本身是好的
+> （102 张全是满幅 336×480），**原因是我重写页面时把 `object-fit` 删掉了**。
 >
-> 当时的判断是"根节点的 `onswipe="ban"` 把手势吃掉了"，去掉之后**依然拖不动** ——
-> 说明 `scrollview` 的拖动在这个运行时上就是不响应
+> Vela 的 `<image>` 默认**不缩放**，按图片原始像素尺寸绘制；
+> 屏幕是 480 物理像素而设计宽度是 336，于是只铺满一部分。
+>
+> 所以 `.big` / `.bgwide` / `.layer` 这类**指定了宽高的 `<image>` 都必须写 `object-fit`**，
+> `npm run test` 现在会断言这一点。
+>
+> #### ⚠️ 坑二：根节点挂 `onswipe` 会吃掉手势
+>
+> 2.3.1 上 CG 拖不动，一度怀疑是根节点的 `onswipe="ban"`。去掉之后**依然拖不动** ——
+> 真正原因是 `scrollview` 的拖动在这个运行时上就是不响应
 > （章节页的 `<list>` 能滚，是因为 `list` 在更底层接管了手势）。
 >
-> 所以改成：**预切图 + `onswipe` + `onclick`**。
-> 这三个原语在所有页面都已验证可用，不依赖任何"组件自己会处理手势"的假设。
+> 两个坑叠加在一起，所以最后选了**不依赖任何"组件会自己处理手势"假设**的方案：
+> 普通 `<image>` + `touchmove`，再挂两条已验证的手势兜底。
 
 ### 全景背景：定时器逐帧推进 `left`
 
@@ -399,14 +412,14 @@ BG_STEP_PX = 4px，BG_TICK_MS = 100ms  →  40px/s，扫完 336px 约 8.4 秒
 | | 2.2 | 2.3.3 |
 |---|---|---|
 | 背景 | 336×480 ×38，1.98 MB | **672×480 ×38，3.23 MB** |
-| CG | 336×480 ×34，1.87 MB | **336×480 ×102（每组 3 张），4.18 MB** |
-| 图片合计 | 4.38 MB | **7.98 MB** |
-| rpk | 4.77 MB | **8.33 MB** |
+| CG | 336×480 ×34，1.87 MB | **854×480 ×34，3.26 MB** |
+| 图片合计 | 4.38 MB | **7.06 MB** |
+| rpk | 4.77 MB | **7.40 MB** |
 
 嫌大：`tools/gen_assets.py` 里
-`BG_W` 改成 336（背景不动，省一半）、`CG_TILES` 改成 1（只有中间那张）、
+`BG_W` 改成 336（背景不动，省一半）、
 或把 `BG_COLORS` / `CG_COLORS` 再降一档。
-改 `BG_W` 必须同步改 `game.ux` 的 `BG_W` 与 CSS `.bgwide` 的宽；改 `CG_W` / `CG_TILES`
+改 `BG_W` 必须同步改 `game.ux` 的 `BG_W` 与 CSS `.bgwide` 的宽；改 `CG_W`
 必须同步改 `game.ux` 和 `cg.ux` 里对应的地方——**`npm run test` 会核对这几处，
 改一半直接报错**。
 
@@ -648,7 +661,7 @@ readChunk(chunk, done) {
 | 构建前静态检查 | `tools/build.js` 的 `preflight()` | 拦住 `data` 与 `protected` 共存、并警告顶层字面量属性；已用故意违规的探针页面验证过确实会拦截 |
 | 剧本完整性 | `tools/validate_story.py` | 44 块覆盖 5569 节点无空洞；**全图可达 5569/5569**；无越界引用 |
 | 剧情流程 | `tools/simulate.py`（复刻 `game.ux` 的 `step()`/`onTap()` 语义跑真实数据） | 8 条策略全部正常收尾；**三条结局线 + Bad End 全部可达**；单周目不串结局 |
-| 工程可构建 | `npm run build` | 编译通过，rpk 8.33 MB，279 条目 / 206 PNG / 44 剧本块，**无 JPEG**（真机解码 JPEG 不可靠） |
+| 工程可构建 | `npm run build` | 编译通过，rpk 7.40 MB，211 条目 / 138 PNG / 44 剧本块，**无 JPEG**（真机解码 JPEG 不可靠） |
 | 运行时分页 | `npm run test`（`tools/test_paginate.js`） | 把 `reader.js` 的 `wrapText()`/`paginateText()` 与 `game.ux` 的 `layout()` **源码原文**抠出来执行，字号 14~30 逐个跑全剧本 5457 句：不超行、不超页、不丢字、不压 `▼`；并核对几何常量与 CSS 一致、关于页 `CPL × 字号 ≤ 行宽` |
 | 全景背景 / CG 全图 | `npm run test` | 核对 `gen_assets.BG_W` == `game.ux.BG_W` == CSS `.bgwide` 宽、`BG_PAN_RANGE` == `BG_W - 屏幕宽`；并断言 `.bgwide` 上**不许出现 `transition`/`animation`**、`game.ux` 里**不许有 `swiper` 或"换 src"那版的残留**、`cg.ux` 里**不许有 `scrollview`**、根节点不许挂 `onswipe`；再检查 34 组 CG × 3 张与 38 张背景宽图**全部存在且无重名**。检查前会先剥掉注释，否则注释里写的「为什么不用它」会误报 |
 | 版本号一致性 | `tools/build.js` 的 `preflight()` | 核对 `about.ux` 的 `APP_VER` 与 `manifest.json` 的 `versionName`，不一致直接拒绝构建 |
@@ -667,10 +680,10 @@ readChunk(chunk, done) {
   它**不能把 `value` 绑成实时值**（会变成受控组件、拖动被弹回），也**不能加 `onswipe`**
   （拖动本身就是 swipe 手势）。改完还没上机验证；即使滑块不可用，
   旁边的 **−／＋ 步进按钮**是普通 `div` + `onclick`，一定能用
-- **CG 的翻页看全图（2.3.3）**：预切 3 张 + `onswipe` + 点击左右热区。
-  前两个原语在所有页面都已验证可用，**但 `onswipe` 挂在 `<image>` 上能否触发没验证过**
-  ——所以额外加了**点击热区兜底**（`div` + `onclick`，百分百可用）。
-  两条路任意一条通，就能看全图
+- **CG 的连续拖动（2.3.4）**：`touchmove` 是 Vela 官方 `commonEvents` 里的成员，
+  但**真机是否真的派发、坐标字段叫什么都没有文档**。所以同时挂了三条路：
+  `touchmove` 连续拖动（最理想）、`onswipe` 步进、左右点击热区步进。
+  **任意一条通就能看全图**；三条都不通则说明触摸事件在这个固件上被限制了
 - **背景逐帧推进 `left`（2.3.3）**：`left` 已证明能正确渲染（方案 ① 里画面位置是对的），
   坏的是 `transition` 补间，所以这版完全不碰补间。
   仍是 10fps 的离散推进，**步长 4px 是真机上肉眼可接受的折中**——
@@ -711,9 +724,8 @@ readChunk(chunk, done) {
   同步改 `game.ux` 的 `BG_W` 与 CSS `.bgwide` 的宽；
   速度改 `game.ux` 的 `BG_STEP_PX`（每帧步长）与 `BG_TICK_MS`（帧间隔）。
   **`npm run test` 会核对这几处，并断言 `.bgwide` 上没有出现 `transition`/`animation`**
-- 想改 CG 全图：改 `tools/gen_assets.py` 的 **`CG_W`**（取景宽度）与 **`CG_TILES`**
-  （切几张，1 = 只有中间那张）。改完重跑 `gen_assets.py` 即可，
-  运行时的后缀推导是自动的；`npm run test` 会核对图块是否齐全、有没有撞名
+- 想改 CG 全图的取景宽度：改 `tools/gen_assets.py` 的 **`CG_W`**，
+  同步改 `src/pages/cg/cg.ux` 顶部的 `CG_W`（`npm run test` 会核对）
 - 想改章节标题：`tools/gen_story.py` 的 `CHAPTER_TITLES`
 - 想加/减 CG 鉴赏分组：`tools/gen_story.py` 的 `GALLERY`
 - 想改哪些章节不进「章节选择」：`tools/gen_story.py` 的 `CHAPTER_HIDE` / `CHAPTER_NEED_CLEAR`

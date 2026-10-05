@@ -121,9 +121,8 @@ if (fs.existsSync(genAssets)) {
   const scrH = num(/^SCREEN_W,\s*SCREEN_H\s*=\s*\d+,\s*(\d+)/m, ga);
   const bgW = num(/^BG_W\s*=\s*(\d+)/m, ga);
   const cgW = num(/^CG_W\s*=\s*(\d+)/m, ga);
-  const cgTiles = num(/^CG_TILES\s*=\s*(\d+)/m, ga);
 
-  if (scrW === null || scrH === null || bgW === null || cgW === null || cgTiles === null) {
+  if (scrW === null || scrH === null || bgW === null || cgW === null || false) {
     console.error('✖ gen_assets.py 里读不到 SCREEN_W / SCREEN_H / BG_W / CG_W / CG_TILES');
     process.exit(1);
   }
@@ -163,12 +162,9 @@ if (fs.existsSync(genAssets)) {
     bad.push('game.ux 里找不到 startBgPan / bgPanTick（背景平移的核心）');
   }
 
-  // ---- CG 靠「预切 3 张 + onswipe/点击翻页」，不许再用横向 scrollview
+  // ---- CG 是「一张宽图 + touchmove 连续拖动」，不许再退回预切翻页 / scrollview
   if (cgW <= scrW) {
-    bad.push('CG_W(' + cgW + ') 必须大于屏幕宽(' + scrW + ')，否则没有可翻的横向内容');
-  }
-  if (cgTiles < 2) {
-    bad.push('CG_TILES(' + cgTiles + ') 小于 2，等于没有全图可看');
+    bad.push('CG_W(' + cgW + ') 必须大于屏幕宽(' + scrW + ')，否则没有可拖的横向内容');
   }
   const cgPath = path.join(proj, 'src', 'pages', 'cg', 'cg.ux');
   if (fs.existsSync(cgPath)) {
@@ -176,21 +172,36 @@ if (fs.existsSync(genAssets)) {
     if (/scrollview/.test(cgCode)) {
       bad.push('cg.ux 里还在用 scrollview：真机实测它的拖动完全不响应');
     }
+    if (!/ontouchmove="onCgTouchMove"/.test(cgCode)) {
+      bad.push('cg.ux 的大图没有挂 ontouchmove（连续拖动失效，会退化成硬跳）');
+    }
+    if (!/ontouchstart="onCgTouchStart"/.test(cgCode)) {
+      bad.push('cg.ux 缺少 ontouchstart（拖动起点取不到，拖了也不动）');
+    }
+    // 兜底手势必须留着：touchmove 万一在别的固件上不派发，还有路可走
     if (!/onswipe="onPanSwipe"/.test(cgCode)) {
-      bad.push('cg.ux 的大图没有挂 onswipe="onPanSwipe"（滑动翻页失效）');
+      bad.push('cg.ux 缺少 onswipe 兜底（touchmove 不灵时就没法看全图了）');
     }
     if (!/onclick="panPrev"/.test(cgCode) || !/onclick="panNext"/.test(cgCode)) {
-      bad.push('cg.ux 缺少点击翻页的保底热区（panPrev / panNext）');
+      bad.push('cg.ux 缺少点击兜底热区（panPrev / panNext）');
     }
-    // 根节点挂 onswipe 会把手势吃掉（2.3.1 上 CG 拖不动就是这个）
     const rootTag = (cgCode.match(/<div class="page"[^>]*>/) || [''])[0];
     if (/onswipe/.test(rootTag)) {
       bad.push('cg.ux 根节点挂了 onswipe（' + rootTag.trim() + '）：会把滑动手势吃掉');
     }
-    const bigW = num(/\.big \{[^}]*?width:\s*(\d+)px/, cgCode);
-    if (bigW !== scrW) {
-      bad.push('cg.ux 的 .big width(' + bigW + ') 应该是屏幕宽 ' + scrW +
-        '（每张预切图本身就是整屏大小）');
+    const bigBlock = (cgCode.match(/\.big \{[^}]*\}/) || [''])[0];
+    const bigW = num(/width:\s*(\d+)px/, bigBlock);
+    if (bigW !== cgW) {
+      bad.push('cg.ux 的 .big width(' + bigW + ') ≠ gen_assets.CG_W(' + cgW + ')');
+    }
+    // 真机上踩过：.big 不写 object-fit 时 Vela 的 <image> 会按**原始尺寸**画，
+    // 结果只占屏幕左边一块、右边全黑。
+    if (!/object-fit/.test(bigBlock)) {
+      bad.push('CSS .big 没有写 object-fit：Vela 的 <image> 默认不缩放，' +
+        '会按原始尺寸绘制，画面只占左侧一块、其余全黑');
+    }
+    if (!/overflow:\s*hidden/.test(cgCode)) {
+      bad.push('cg.ux 的查看器没有 overflow:hidden，比屏幕宽的图不会被裁住');
     }
   }
 
@@ -198,8 +209,7 @@ if (fs.existsSync(genAssets)) {
     console.error('✖ 全景背景 / CG 全图 参数不一致：\n    ' + bad.join('\n    '));
     process.exit(1);
   }
-  console.log('全景背景 ✔  BG_W=' + bgW + ' 平移 ' + (bgW - scrW) + 'px（定时器逐帧推进 left）' +
-    '；CG 全图 ✔ 预切 ' + cgTiles + ' 张 ' + scrW + 'x' + scrH + '（onswipe + 点击翻页）');
+  console.log('全景背景 ✔  BG_W=' + bgW + ' 平移 ' + (bgW - scrW) + 'px（定时器逐帧推进 left）；CG 全图 ✔ ' + cgW + 'x' + scrH + ' 宽图（touchmove 连续拖动）');
 
   // ---- 派生文件名是纯字符串拼接（运行时不查表），必须齐全且不能撞名
   const assetsPath = path.join(proj, 'src', 'common', 'assets.js');
@@ -237,8 +247,8 @@ if (fs.existsSync(genAssets)) {
     };
 
     const cgs = (ap.match(/"[^"]*\/c\/[^"]+"/g) || []).map((x) => x.slice(1, -1));
-    const nCg = check(cgs, ['_l', '_r'], 'CG');
-    console.log('CG 全图图块 ✔  ' + nCg + ' 组 × ' + cgTiles + ' 张，全部存在且无重名');
+    const nCg = check(cgs, [], 'CG');
+    console.log('CG 全图 ✔  ' + nCg + ' 组，文件全部存在且无重名');
 
     // 背景现在是「一张宽图」，索引表里那张就是最终产物，没有派生文件要查
     const bgs = (ap.match(/"[^"]*\/b\/[^"]+"/g) || []).map((x) => x.slice(1, -1));

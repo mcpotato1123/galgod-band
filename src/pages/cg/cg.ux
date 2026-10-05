@@ -1,6 +1,6 @@
 <template>
-  <!-- 根节点**不能**挂 onswipe：那会把滑动手势整个吃掉（2.3.1 上 CG 拖不动就是这个原因）。
-       这个页面需要的是"接住"滑动来翻页，所以 onswipe 只挂在要看全图的那张图上。 -->
+  <!-- 根节点不挂 onswipe：那会把手势整个吃掉（2.3.1 上 CG 拖不动就是这个）。
+       需要接住滑动的那张图自己挂。 -->
   <div class="page">
     <text class="title">CG 鉴赏</text>
     <text class="sub">已解锁 {{openCount}} / {{total}} 组 · 点按查看</text>
@@ -21,19 +21,23 @@
     <div class="back" onclick="back" onswipe="ban"><text class="btn-t">返回</text></div>
 
     <!-- 大图查看
-         CG 素材是完整 16:9，被预切成 3 张整屏图（左/中/右），
-         左右滑动或点两侧就能看到被裁掉的部分。
-         不用横向 scrollview：它的拖动在这台设备上完全不响应。
-         同一组的差分图仍然用下面的 ‹ › 切换。 -->
-    <div class="viewer" if="{{viewing}}">
-      <image class="big" src="{{panSrc}}" onswipe="onPanSwipe"></image>
+         CG 是一张完整 16:9 的宽图（854×480），比屏幕宽得多。
+         显示时靠 **touchmove 连续拖动** left 来看被裁掉的部分 ——
+         拖动是连续跟随手指的，不是一格一格跳。
 
-      <!-- onswipe 万一不灵的保底：点画面左右两侧翻页。
-           用普通 div + onclick，这两个在所有页面都已验证可用。 -->
-      <div class="tapzone zl" if="{{panAll > 1 && panIdx > 0}}"
-           onclick="panPrev" onswipe="ban"></div>
-      <div class="tapzone zr" if="{{panAll > 1 && panIdx < panAll - 1}}"
-           onclick="panNext" onswipe="ban"></div>
+         ⚠️ .big 必须显式写 object-fit，否则 Vela 的 <image> 会按**原始尺寸**画，
+            结果只占屏幕左边一块、右边全黑（2.3.3 上就是这个现象）。
+
+         另外两条手势同时挂着做兜底：onswipe 与左右点击热区。
+         万一 touchmove 在某些固件上不派发，也还能看全图。 -->
+    <div class="viewer" if="{{viewing}}">
+      <image class="big" style="{{cgStyle}}" src="{{bigSrc}}"
+             ontouchstart="onCgTouchStart" ontouchmove="onCgTouchMove"
+             ontouchend="onCgTouchEnd" ontouchcancel="onCgTouchEnd"
+             onswipe="onPanSwipe"></image>
+
+      <div class="tapzone zl" if="{{canLeft}}" onclick="panPrev" onswipe="ban"></div>
+      <div class="tapzone zr" if="{{canRight}}" onclick="panNext" onswipe="ban"></div>
 
       <div class="vtop">
         <text class="vname">{{vName}}</text>
@@ -42,7 +46,7 @@
 
       <div class="vclose" onclick="closeView" onswipe="ban"><text class="vclose-t">关闭</text></div>
 
-      <text class="vhint2" if="{{panAll > 1}}">左右滑动 / 点两侧，看被裁掉的部分　{{panIdx + 1}}/{{panAll}}</text>
+      <text class="vhint2">按住画面左右拖动，看被裁掉的部分</text>
 
       <div class="vbar" if="{{pageAll > 1}}">
         <div class="vbtn" onclick="prev" onswipe="ban"><text class="vbtn-t">‹</text></div>
@@ -78,18 +82,21 @@
           align-items: center; justify-content: center; }
   .btn-t { font-size: 19px; color: #ffffff; }
 
+  /* overflow:hidden 让比屏幕宽的图被裁在这个框里，靠 left 决定看哪一段 */
   .viewer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
-            background-color: #000000; }
-  /* 每张预切图本身就是 336×480，所以这里 1:1 铺满，不需要缩放 */
-  .big { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; }
+            background-color: #000000; overflow: hidden; }
+  /* width 必须等于 tools/gen_assets.py 的 CG_W，npm run test 会核对。
+     object-fit 也必须写 —— 不写的话 Vela 按原始尺寸画，只会占左边一块。 */
+  .big { position: absolute; top: 0px; left: 0px; width: 854px; height: 480px;
+         object-fit: fill; }
 
-  /* 点击翻页的热区：只占左右窄条，避开顶栏和底栏，不挡关闭/切换按钮 */
-  .tapzone { position: absolute; top: 56px; width: 52px; height: 366px; }
+  /* 点击翻页的保底热区：只占左右窄条，避开顶栏和底栏 */
+  .tapzone { position: absolute; top: 56px; width: 48px; height: 336px; }
   .zl { left: 0px; }
-  .zr { left: 284px; }
+  .zr { left: 288px; }
 
   .vtop { position: absolute; top: 10px; left: 0px; width: 336px; flex-direction: row;
-          align-items: center; padding-left: 14px; padding-right: 86px; }
+          align-items: center; padding-left: 14px; padding-right: 88px; }
   .vname { font-size: 16px; color: #ffe6ef; lines: 1; }
   .vnum { font-size: 15px; color: #d8cbd2; }
 
@@ -98,8 +105,9 @@
             align-items: center; justify-content: center; }
   .vclose-t { font-size: 17px; color: #ffe6ef; }
 
-  .vhint2 { position: absolute; top: 424px; left: 0px; width: 336px; text-align: center;
-            font-size: 13px; color: rgba(226, 214, 224, 0.8); }
+  /* 提示放在底栏上方一行，别再和底栏重叠（2.3.3 上 top:424 撞上了 top:428 的底栏） */
+  .vhint2 { position: absolute; top: 400px; left: 0px; width: 336px; text-align: center;
+            font-size: 13px; color: rgba(226, 214, 224, 0.78); }
 
   .vbar { position: absolute; top: 428px; left: 22px; width: 292px; height: 42px;
           border-radius: 21px; background-color: rgba(0, 0, 0, 0.62);
@@ -118,9 +126,29 @@ import { CGG } from '../../common/cglist.js'
 import { IMG } from '../../common/assets.js'
 import { loadSeen } from '../../common/reader.js'
 
-// onswipe 的方向字段在不同版本里可能给 evt.direction / evt.detail.direction / evt.target.direction
+// CG 素材宽度，必须与 tools/gen_assets.py 的 CG_W 一致（npm run test 会核对）
+const CG_W = 854
+const CG_PAN_RANGE = CG_W - 336        // 可拖动的总距离
+const CG_PAN_STEP = Math.round(CG_PAN_RANGE / 3)   // 点击/滑动兜底时一次走多远
+
+// 触摸事件的坐标字段各版本不统一，挨个试。
+// Vela 的 commonEvents 里有 touchstart/touchmove/touchend，但字段名没有文档。
+function readX(e) {
+  if (!e) return null
+  let p = null
+  if (e.touches && e.touches.length) p = e.touches[0]
+  else if (e.changedTouches && e.changedTouches.length) p = e.changedTouches[0]
+  else p = e
+  if (!p) return null
+  if (typeof p.clientX === 'number') return p.clientX
+  if (typeof p.pageX === 'number') return p.pageX
+  if (typeof p.x === 'number') return p.x
+  if (typeof p.offsetX === 'number') return p.offsetX
+  return null
+}
+
 function readDir(e) {
-  if (e === null || e === undefined) return ''
+  if (!e) return ''
   if (typeof e.direction === 'string') return e.direction
   if (e.detail && typeof e.detail.direction === 'string') return e.detail.direction
   if (e.target && typeof e.target.direction === 'string') return e.target.direction
@@ -134,9 +162,10 @@ export default {
     openCount: 0,
     total: 0,
     viewing: false,
-    panSrc: '',
-    panIdx: 0,
-    panAll: 1,
+    bigSrc: '',
+    cgStyle: 'left: 0px;',
+    canLeft: false,
+    canRight: true,
     vName: '',
     pageNo: 1,
     pageAll: 1
@@ -147,7 +176,9 @@ export default {
     this.groups = CGG || []
     this.curGroup = -1
     this.curPage = 0
-    this.panTiles = []
+    this.cgLeft = 0
+    this.touchX = null
+    this.touchLeft = 0
     this.lockTap = 0
     loadSeen((list) => {
       for (let i = 0; i < list.length; i++) this.seen[list[i]] = 1
@@ -177,18 +208,6 @@ export default {
   ban() {},
   lock() { this.lockTap = Date.now() },
 
-  // 索引表里存的是**中间**那张（剧情正文用它，配合 object-fit:cover 就是居中裁切）。
-  // 最左/最右是按 <name>_l / <name>_r 后缀推出来的，不用查表。
-  buildPanTiles(idx) {
-    const mid = IMG[idx] || ''
-    if (!mid) return ['']
-    const dot = mid.lastIndexOf('.')
-    if (dot < 0) return [mid]
-    const stem = mid.slice(0, dot)
-    const ext = mid.slice(dot)
-    return [stem + '_l' + ext, mid, stem + '_r' + ext]
-  },
-
   open(i) {
     this.lock()
     const g = this.groups[i]
@@ -208,27 +227,50 @@ export default {
   showPage() {
     const g = this.groups[this.curGroup]
     if (!g) return
-    this.panTiles = this.buildPanTiles(g.im[this.curPage])
-    this.panAll = this.panTiles.length
-    this.panIdx = Math.floor(this.panAll / 2)   // 默认停在中间那张
-    this.panSrc = this.panTiles[this.panIdx] || ''
+    this.bigSrc = IMG[g.im[this.curPage]] || ''
     this.pageNo = this.curPage + 1
+    // 每张 CG 都从中间开始看 —— 这是最常见的构图，两侧按需拖出来
+    this.setPan(CG_PAN_RANGE / 2)
   },
 
-  setPan(i) {
-    if (i < 0 || i >= this.panAll) return
-    this.panIdx = i
-    this.panSrc = this.panTiles[i] || ''
+  setPan(v) {
+    let l = v
+    if (l > 0) l = 0
+    if (l < -CG_PAN_RANGE) l = -CG_PAN_RANGE
+    l = Math.round(l)
+    this.cgLeft = l
+    this.cgStyle = 'left: ' + l + 'px;'
+    this.canLeft = l < -2
+    this.canRight = l > -CG_PAN_RANGE + 2
   },
 
-  panPrev() { this.lock(); this.setPan(this.panIdx - 1) },
-  panNext() { this.lock(); this.setPan(this.panIdx + 1) },
+  // ---- 连续拖动：left 跟着手指走，不是一格一格跳
+  onCgTouchStart(e) {
+    const x = readX(e)
+    if (x === null) return
+    this.touchX = x
+    this.touchLeft = this.cgLeft
+  },
 
+  onCgTouchMove(e) {
+    if (this.touchX === null) return
+    const x = readX(e)
+    if (x === null) return
+    this.setPan(this.touchLeft + (x - this.touchX))
+  },
+
+  onCgTouchEnd() { this.touchX = null },
+
+  // ---- 兜底一：滑动
   onPanSwipe(e) {
     const dir = readDir(e)
-    if (dir === 'left') this.panNext()        // 往左滑 = 看右边的内容
-    else if (dir === 'right') this.panPrev()
+    if (dir === 'left') this.setPan(this.cgLeft - CG_PAN_STEP)      // 往左滑 = 看右边
+    else if (dir === 'right') this.setPan(this.cgLeft + CG_PAN_STEP)
   },
+
+  // ---- 兜底二：点左右两侧
+  panPrev() { this.lock(); this.setPan(this.cgLeft + CG_PAN_STEP) },
+  panNext() { this.lock(); this.setPan(this.cgLeft - CG_PAN_STEP) },
 
   prev() {
     this.lock()
@@ -249,8 +291,7 @@ export default {
   closeView() {
     this.lock()
     this.viewing = false
-    this.panTiles = []
-    this.panSrc = ''
+    this.bigSrc = ''
     this.vName = ''
   },
 

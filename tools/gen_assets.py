@@ -38,15 +38,14 @@ SCREEN_W, SCREEN_H = 336, 480
 #   BG_W = 672       → 可平移 336px（当前，2 屏宽）
 BG_W = 672
 
-# ---- CG：滑动看全图
-# 出成完整 16:9（高 480 → 宽 854），再**预切成 CG_TILES 张整屏图**，
-# 运行时用 onswipe / 点击翻页，就能看到原本被裁掉的两侧。
-# 用预切图而不是横向 scrollview：scrollview 的拖动在真机上完全不响应。
+# ---- CG：拖动看全图
+# 出一张完整 16:9 的宽图（高 480 → 宽 854），运行时靠 touchmove 连续拖左右看全图。
 #
-#   CG_TILES = 1 → 只有中间一张（等于老行为）
-#   CG_TILES = 3 → 左/中/右，可分页看全图（当前）
+# 为什么不再预切多张：切块只能「翻页」，一格一格硬跳，观感生硬。
+# Vela 的 commonEvents 里有 touchstart/touchmove/touchend，能拿到坐标，
+# 所以改成连续拖动 —— 和背景那边「不许用 transition」的教训不冲突，
+# 因为这里改的是 left（能正确渲染），不是补间。
 CG_W = 854
-CG_TILES = 3
 
 SPRITE_W, SPRITE_H = 143, 380
 # 背景要出 672 宽的宽幅、CG 要出 3 张，体积都涨，调色板相应收一点留余量。
@@ -142,36 +141,13 @@ def main(raw_dir, proj):
             im = contain(im, SPRITE_W, SPRITE_H, bg=None, anchor="bottom")
             save_palette(im, dst, SP_COLORS, alpha=True)
         else:  # cg
-            # 先取完整的 16:9 宽幅，再预切成 CG_TILES 张整屏图：
-            #   中间那张 写到 assets.json 的 out（剧情正文用它 + object-fit:cover，
-            #   正好等于老的居中裁切观感，而且索引表只认一个文件、下标不会错位）
-            #   最左 / 最右 写成 <name>_l.png / <name>_r.png，运行时按后缀推出来
-            wide = cover(im, CG_W, SCREEN_H, bias_y=0.5)
-            span = CG_W - SCREEN_W
-            stem, ext = os.path.splitext(dst)
-            mid = CG_TILES // 2
-            for t in range(CG_TILES):
-                # t=0 最左，t=CG_TILES-1 最右
-                off = int(round(span * t / float(max(1, CG_TILES - 1))))
-                tile = wide.crop((off, 0, off + SCREEN_W, SCREEN_H))
-                if t == mid:
-                    save_palette(tile, dst, CG_COLORS, alpha=False)
-                elif t == 0:
-                    save_palette(tile, stem + "_l" + ext, CG_COLORS, alpha=False)
-                elif t == CG_TILES - 1:
-                    save_palette(tile, stem + "_r" + ext, CG_COLORS, alpha=False)
-                else:
-                    save_palette(tile, stem + ("_t%d" % t) + ext, CG_COLORS, alpha=False)
+            # 一张完整 16:9 宽图。剧情正文用它 + object-fit:cover 自动居中裁成满屏，
+            # 鉴赏页则靠 touchmove 连续拖动左右看全图 —— 一份素材两处用。
+            im = cover(im, CG_W, SCREEN_H, bias_y=0.5)
+            save_palette(im, dst, CG_COLORS, alpha=False)
 
-        # 体积统计要把**所有**派生图都算上。
-        # CG 一张源图会出 CG_TILES 个文件，只统计 assets.json 里那一张会少报。
+        # 现在每张源图只对应一个输出文件（CG 不再预切），直接取大小即可
         n = os.path.getsize(dst)
-        stem, ext = os.path.splitext(dst)
-        if kind == "cg":
-            for suf in ["_l", "_r"] + [("_t%d" % t) for t in range(1, CG_TILES - 1)]:
-                fp = stem + suf + ext
-                if os.path.isfile(fp):
-                    n += os.path.getsize(fp)
         total += n
         report.setdefault(kind, [0, 0])
         report[kind][0] += 1
