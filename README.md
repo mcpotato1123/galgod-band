@@ -7,12 +7,12 @@
 ```
 剧本数据  5,569 个节点 / 18 章 / 44 个分块
 对话      5,457 句（全量，非删减）
-美术      136 张（背景 38 / 立绘 55 / CG 34 / 鉴赏缩略图 9）+ 标题画 + 图标
+美术      136 张（背景 38 **宽幅 504×480** / 立绘 55 / CG 34 / 鉴赏缩略图 9）+ 标题画 + 图标
 分支      15 个选择点，3 条结局线 + 1 个 Bad End
 CG 鉴赏   9 组 / 32 张差分图，按原作 gallery.rpy 的分组与解锁条件
 页面      7 个：主页 / 正文 / 存档 / 章节 / CG 鉴赏 / 设置 / 关于
 协议      代码 MIT（见 LICENSE）；剧本与美术资源不在 MIT 范围内（见 NOTICE.md）
-产物      dist/com.galgod.band.debug.2.2.rpk   4.77 MB
+产物      dist/com.galgod.band.debug.2.3.rpk   5.69 MB
 ```
 
 > **免责声明**：本项目是非官方的个人移植，仅供学习交流。
@@ -119,9 +119,14 @@ GalGod手环版/
 
 ```bash
 npm install                    # 只有 aiot-toolkit 一个真正的依赖
-npm run build                  # → dist/com.galgod.band.debug.2.2.rpk
+npm run build                  # → dist/com.galgod.band.debug.2.3.rpk
+npm run release                # → dist/com.galgod.band.release.2.3.rpk（需要 sign/ 下的证书）
+npm run test                   # 排版 + 几何常量 + 全景参数一致性
 npm run start                  # 起模拟器预览（需要 AIoT-IDE/模拟器环境）
 ```
+
+> ⚠️ `aiot` **每次构建都会清空 `dist/`**，所以先构建 debug 再构建 release，
+> debug 包会消失。两个都要留的话，构建完一个先把 rpk 挪出 `dist/`。
 
 `npm run build` 用的是 `tools/build.js` 而不是直接 `aiot build`，原因见第五节。
 
@@ -333,7 +338,61 @@ Ren'Py 里这两种写法含义不同，别搞混：
 > 它是写死的字符串，很容易改了 `manifest.json` 忘了改它，
 > 所以 `tools/build.js` 的构建前检查会核对两者，不一致直接**拒绝构建**。
 
-### 排版：分页搬到了运行时
+### CG 鉴赏滑动翻页
+
+大图查看用 **`<swiper>`**，整组差分图一次性铺进去，靠原生滑动翻页。
+之前是 `‹` `›` 两个按钮，手环上点着累。
+
+```html
+<swiper class="sw" index="{{swIndex}}" loop="true" indicator="false"
+        duration="240" onchange="onSwipe">
+  <image class="big" for="{{vlist}}" tid="v" src="{{$item}}"></image>
+</swiper>
+```
+
+- `swiper` 和 `list` 一样**必须显式给宽高**，不然铺不开
+- `loop="true"` 让首尾能绕回去
+- `change` 事件的取值路径和 `slider` 一样不统一，用 `readIndex()` 兜了
+  `evt.index` / `evt.detail.index` / `evt.target.index` 三种
+- 顶部显示「组名 + 第几张」，底部提示「左右滑动切换」（只有多于 1 张才显示提示）
+
+### 全景背景
+
+背景不再裁成死的 336×480，而是出成**宽幅 504×480**，运行时缓慢左右平移，做成全景感。
+
+**平移不用定时器逐帧改布局**——那在手环上又慢又费电。改成：
+
+1. 素材宽 504、显示框 336，两者之差 **168px** 就是可平移距离
+2. `<image>` 的 `width` 是 504，`left` 在 `0` 与 `-168px` 之间切换
+3. **位移补间交给 CSS `transition`**（`transition-property: left`，
+   `transition-duration: 22000ms`），只用一个 22 秒的定时器每 22 秒换个目标位置
+
+这样每段平移都是原生动画，CPU 开销几乎为零。定时器只在阅读时跑，
+`onHide` / `onDestroy` 会停掉。
+
+> **换背景时不重置平移位置**。重置会让新图从旧位置慢慢滑回起点（最长要 22 秒），
+> 非常难看。保持当前偏移继续来回平移即可——所有背景都是同一宽度，偏移永远有效。
+
+**代价**：背景素材从 336×480 变成 504×480，体积 1.98 → 2.91 MB，
+rpk 从 4.77 → **5.69 MB**。嫌大就把 `tools/gen_assets.py` 的 `BG_W` 改小
+（336 = 不平移，672 = 平移 336px 但背景体积接近翻倍），
+`game.ux` 的 `PAN_RANGE` 和 CSS 的 `.bgw width` 要同步改——`npm run test` 会核对这三者。
+
+### 屏幕常亮
+
+阅读时保持屏幕常亮，走 Vela 的 `@system.brightness`：
+
+```js
+import brightness from '@system.brightness'
+brightness.setKeepScreenOn({ keepScreenOn: true })
+```
+
+- **必须在 manifest 的 `features` 里声明 `system.brightness`**，否则调用会失败
+- 包了一层 `try/catch`：万一某些固件没有这个接口，也只是不常亮，不能让阅读崩掉
+- 进正文页开、`onHide` / `onDestroy` 关
+- 设置页有开关（**默认开**）。注意 `normalizeSettings` 里不能用 `!!s.keepOn` ——
+  老存档没有这个键时会被压成 `false`，得显式判断 `undefined`
+
 
 为了让字号能**无级调节**，剧本里现在存的是**原始文本**，分页由 `game.ux` 在运行时按
 当前字号现算：
@@ -557,8 +616,9 @@ readChunk(chunk, done) {
 | 构建前静态检查 | `tools/build.js` 的 `preflight()` | 拦住 `data` 与 `protected` 共存、并警告顶层字面量属性；已用故意违规的探针页面验证过确实会拦截 |
 | 剧本完整性 | `tools/validate_story.py` | 44 块覆盖 5569 节点无空洞；**全图可达 5569/5569**；无越界引用 |
 | 剧情流程 | `tools/simulate.py`（复刻 `game.ux` 的 `step()`/`onTap()` 语义跑真实数据） | 8 条策略全部正常收尾；**三条结局线 + Bad End 全部可达**；单周目不串结局 |
-| 工程可构建 | `npm run build` | 编译通过，rpk 4.76 MB，209 条目 / 138 PNG / 44 剧本块，**无 JPEG**（真机解码 JPEG 不可靠） |
-| 运行时分页 | `npm run test`（`tools/test_paginate.js`） | 把 `reader.js` 的 `wrapText()`/`paginateText()` 与 `game.ux` 的 `layout()` **源码原文**抠出来执行，字号 14~30 逐个跑全剧本 5457 句：不超行、不超页、不丢字、不压 `▼`；并核对几何常量与 CSS 一致、关于页 `CPL × 字号 ≤ 行宽` |
+| 工程可构建 | `npm run build` | 编译通过，rpk 5.69 MB，211 条目 / 138 PNG / 44 剧本块，**无 JPEG**（真机解码 JPEG 不可靠） |
+| 运行时分页 | `npm run test`（`tools/test_paginate.js`） | 把 `reader.js` 的 `wrapText()`/`paginateText()` 与 `game.ux` 的 `layout()` **源码原文**抠出来执行，字号 14~30 逐个跑全剧本 5457 句：不超行、不超页、不丢字、不压 `▼`；并核对几何常量与 CSS 一致、关于页 `CPL × 字号 ≤ 行宽`、**全景背景三元约束** |
+| 全景背景参数 | `npm run test` | 核对 `gen_assets.py` 的 `BG_W` − 屏幕宽 == `game.ux` 的 `PAN_RANGE` == CSS `.bgw` 的 `width`，且 `PAN_MS` == `transition-duration`。这是跨三个文件的约束，特别容易只改一半 |
 | 版本号一致性 | `tools/build.js` 的 `preflight()` | 核对 `about.ux` 的 `APP_VER` 与 `manifest.json` 的 `versionName`，不一致直接拒绝构建 |
 | 导出目录可独立构建 | 把 `galgod-band/` 复制出去单独 `npm run build` | 产出与主工程完全一致 |
 | 上传前自检 | `tools/check_encoding.py` | 全部文本文件合法 UTF-8、无误传文件、README 引用的图片都在 |
@@ -575,9 +635,19 @@ readChunk(chunk, done) {
   它**不能把 `value` 绑成实时值**（会变成受控组件、拖动被弹回），也**不能加 `onswipe`**
   （拖动本身就是 swipe 手势）。改完还没上机验证；即使滑块不可用，
   旁边的 **−／＋ 步进按钮**是普通 `div` + `onclick`，一定能用
+- **`<swiper>`（2.3 新增）**：CG 鉴赏的大图滑动翻页用的就是它，同样没上过真机。
+  它的 `change` 事件取值路径在不同版本里不统一，代码里 `readIndex()` 兜了三种；
+  如果真机上滑动没反应，退回 `‹ ›` 按钮只需改模板里那几行
+- **CSS `transition` 做平移（2.3 新增）**：全景背景依赖 `transition-property: left`
+  的原生补间。如果真机上 `transition` 不生效，背景会**瞬移**而不是平滑滑动
+  （功能不受影响，只是不好看）。可以改回「定时器 + 小步位移」，但会明显更耗电
+- **`@system.brightness` 的 `setKeepScreenOn`（2.3 新增）**：接口本身来自另一个
+  已编译的 Vela 应用，写法可确认；但本机固件是否放行未验证。已包 `try/catch`，
+  失败只是不常亮，不会影响阅读
 - 圆角矩形屏四角是否遮挡内容（官方没有 `safeArea` API，本工程左右各留了 10~14px）
 - 单页 120 KB 左右的 `game.js`（debug 未压缩）在真机上的解析耗时
 - 连续高频换图时的内存表现（参考工程要求真机连续推进 30 分钟无堆分配失败/无重启，本工程无法验证）
+- **常亮 + 全景平移同时开关的耗电表现**：两个都是「一直有东西在动」，没有实测数据
 
 > 字号不需要「保守估计每行字数」了——2.1 起分页在运行时按 `floor(310 / 字号)` 现算，
 > 每行宽度天然 ≤ 310 ≤ 正文框 316，**数学上不可能折行**。想调版面改
@@ -600,6 +670,10 @@ readChunk(chunk, done) {
 - 想改字号/速度的调节范围：`src/common/reader.js` 的 `SIZE_MIN/MAX`、`SPEED_MIN/MAX`、`AUTO_MIN/MAX`
 - 想改画质与体积：`tools/gen_assets.py` 里的 `BG_COLORS` / `SP_COLORS` / `CG_COLORS` 与 `SPRITE_W`/`SPRITE_H`
   （改 `SPRITE_W`/`SPRITE_H` 必须同步改 `src/pages/game/game.ux` 里 `.sp` 的宽高与三个槽位的 `left`）
+- 想改全景背景的宽度/平移：改 `tools/gen_assets.py` 的 **`BG_W`**
+  （336 = 不平移，504 = 平移 168px（当前），672 = 平移 336px），
+  再把 `game.ux` 的 `PAN_RANGE`、`PAN_MS` 和 CSS `.bgw` 的 `width`、`transition-duration` 同步改掉。
+  **`npm run test` 会核对这四处是否自洽**，改一半会被拦下来
 - 想改章节标题：`tools/gen_story.py` 的 `CHAPTER_TITLES`
 - 想加/减 CG 鉴赏分组：`tools/gen_story.py` 的 `GALLERY`
 - 想改哪些章节不进「章节选择」：`tools/gen_story.py` 的 `CHAPTER_HIDE` / `CHAPTER_NEED_CLEAR`

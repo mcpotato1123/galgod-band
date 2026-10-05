@@ -99,6 +99,47 @@ if (cssPanel !== geom.PANEL_TOP || cssPanelH !== geom.PANEL_H || cssName !== geo
 console.log('几何常量与 CSS 一致 ✔  ' +
   NAMES.map((n) => n + '=' + geom[n]).join(' ') + ' MORE_TOP=' + geom.MORE_TOP);
 
+// ---- 全景背景：这是一个跨三个文件的三元约束，特别容易改一半
+//      gen_assets.py 的 BG_W  −  屏幕宽  ==  game.ux 的 PAN_RANGE  ==  CSS .bgw 的 width
+const genAssets = path.join(proj, 'tools', 'gen_assets.py');
+if (fs.existsSync(genAssets)) {
+  const ga = fs.readFileSync(genAssets, 'utf8');
+  const mBgw = ga.match(/^BG_W\s*=\s*(\d+)/m);
+  const mScr = ga.match(/^SCREEN_W,\s*SCREEN_H\s*=\s*(\d+),\s*(\d+)/m);
+  const mPan = src.match(/const PAN_RANGE\s*=\s*(\d+)/);
+  const cssBgw = src.match(/\.bgw \{[^}]*?width:\s*(\d+)px/);
+  if (!mBgw || !mScr || !mPan || !cssBgw) {
+    console.error('✖ 读不全全景背景的参数：' +
+      'gen_assets.BG_W=' + (mBgw && mBgw[1]) +
+      ' SCREEN_W=' + (mScr && mScr[1]) +
+      ' game.ux PAN_RANGE=' + (mPan && mPan[1]) +
+      ' CSS .bgw width=' + (cssBgw && cssBgw[1]));
+    process.exit(1);
+  }
+  const bgw = Number(mBgw[1]);
+  const scr = Number(mScr[1]);
+  const pan = Number(mPan[1]);
+  const cssW = Number(cssBgw[1]);
+  const bad = [];
+  if (bgw - scr !== pan) bad.push('BG_W(' + bgw + ') - 屏幕宽(' + scr +
+    ') = ' + (bgw - scr) + ' ≠ PAN_RANGE(' + pan + ')');
+  if (cssW !== bgw) bad.push('CSS .bgw width(' + cssW + ') ≠ BG_W(' + bgw + ')');
+  if (pan <= 0) bad.push('PAN_RANGE 必须为正，否则背景不会动');
+  if (bad.length) {
+    console.error('✖ 全景背景参数不一致：\n    ' + bad.join('\n    '));
+    process.exit(1);
+  }
+  const mPanMs = src.match(/const PAN_MS\s*=\s*(\d+)/);
+  const cssDur = src.match(/\.bgw \{[^}]*?transition-duration:\s*(\d+)ms/);
+  if (mPanMs && cssDur && Number(mPanMs[1]) !== Number(cssDur[1])) {
+    console.error('✖ 平移时长不一致：PAN_MS=' + mPanMs[1] +
+      ' 但 CSS transition-duration=' + cssDur[1] + 'ms');
+    process.exit(1);
+  }
+  console.log('全景背景参数 ✔  BG_W=' + bgw + ' 屏幕宽=' + scr +
+    ' 平移 ' + pan + 'px  单程 ' + (mPanMs ? mPanMs[1] : '?') + 'ms');
+}
+
 // ---- 关于页：它把每行字数写成常量 CPL，也要核对「CPL × 字号 ≤ 行宽」
 const aboutPath = path.join(proj, 'src', 'pages', 'about', 'about.ux');
 if (fs.existsSync(aboutPath)) {

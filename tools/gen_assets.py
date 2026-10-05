@@ -23,6 +23,15 @@ from PIL import Image, ImageDraw, ImageFont
 
 # 画布与运行时组件尺寸（与 src/pages/game/game.ux 的 CSS 保持一致）
 SCREEN_W, SCREEN_H = 336, 480
+
+# 背景生成成「宽幅」，运行时在 game.ux 里用 CSS transition 缓慢左右平移做全景效果，
+# 而不是死死裁成一块 336×480。
+#   BG_W = 336  → 不平移（回到老行为）
+#   BG_W = 504  → 可平移 168px（默认，1.5 屏宽）
+#   BG_W = 672  → 可平移 336px，画面更宽，但背景体积接近翻倍
+# 平移距离 = BG_W - SCREEN_W，必须和 game.ux 的 PAN_RANGE 一致。
+BG_W = 504
+
 SPRITE_W, SPRITE_H = 143, 380
 BG_COLORS = 128
 SP_COLORS = 128
@@ -92,7 +101,9 @@ def main(raw_dir, proj):
         kind = it["kind"]
 
         if kind == "bg":
-            im = cover(im, SCREEN_W, SCREEN_H, bias_y=0.42)   # 略偏上，底部会被对话框挡住
+            # 出成宽幅（BG_W 宽），运行时左右平移做全景；
+            # 纵向仍然偏上取景，因为底部会被对话底板挡住
+            im = cover(im, BG_W, SCREEN_H, bias_y=0.42)
             save_palette(im, dst, BG_COLORS, alpha=False)
         elif kind == "sp":
             im = contain(im, SPRITE_W, SPRITE_H, bg=None, anchor="bottom")

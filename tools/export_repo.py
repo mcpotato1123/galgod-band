@@ -30,8 +30,12 @@ PICK = [
     "preview/ui-preview.png",     # README 里引用的界面预览；cg-check.png 是过程稿，不传
 ]
 # 明确排除
-SKIP_NAMES = {"__pycache__", ".DS_Store", "Thumbs.db"}
-SKIP_EXT = {".pyc", ".pyo"}
+# sign/ 里是**签名私钥**。它虽然写进了下面的 .gitignore（git add 不会收），
+# 但私钥压根不该出现在导出树里 —— 导出目录会被整个复制到别处，
+# 只要有一次忘了 .gitignore 就是永久泄露。这里直接从源头不复制。
+SKIP_NAMES = {"__pycache__", ".DS_Store", "Thumbs.db", "sign", "node_modules",
+              "dist", "build"}
+SKIP_EXT = {".pyc", ".pyo", ".pem", ".rpk"}
 
 GITIGNORE = """# deps & build output
 node_modules/
@@ -93,6 +97,19 @@ def main(dst):
     with io.open(os.path.join(dst, ".gitignore"), "w",
                  encoding="utf-8", newline="\n") as f:
         f.write(GITIGNORE)
+
+    # 安全兜底：导出树里绝不允许出现私钥/证书。
+    # 上面已经从 SKIP_NAMES 排除了 sign/，这里是"万一"的第二道闸 ——
+    # 私钥一旦进了公开仓库就是永久泄露，删掉提交也还在历史里，宁可构建失败。
+    leaked = []
+    for root, dirs, files in os.walk(dst):
+        for n in files:
+            if n.lower().endswith((".pem", ".p12", ".pfx", ".keystore", ".jks", ".key")):
+                leaked.append(os.path.relpath(os.path.join(root, n), dst))
+    if leaked:
+        shutil.rmtree(dst, ignore_errors=True)
+        sys.exit("!! 导出目录里出现了密钥/证书，已中止并删除导出目录：\n    "
+                 + "\n    ".join(leaked))
 
     # 汇总
     total = 0

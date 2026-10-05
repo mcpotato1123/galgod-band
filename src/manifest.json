@@ -2,15 +2,16 @@
   "package": "com.galgod.band",
   "name": "GalGod",
   "icon": "/common/icon.png",
-  "versionName": "2.2",
-  "versionCode": 13,
+  "versionName": "2.3",
+  "versionCode": 15,
   "minPlatformVersion": 1100,
   "deviceTypeList": ["watch"],
   "features": [
     { "name": "system.router" },
     { "name": "system.storage" },
     { "name": "system.file" },
-    { "name": "system.prompt" }
+    { "name": "system.prompt" },
+    { "name": "system.brightness" }
   ],
   "config": {
     "designWidth": 336,

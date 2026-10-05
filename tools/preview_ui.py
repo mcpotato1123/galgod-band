@@ -353,36 +353,37 @@ def main(raw, proj):
         d.text((232 + (50 - vw) / 2, y + 5), val, font=f_val, fill=(255, 179, 205))
 
     rows = [
-        (34, 30, "字体大小", "20", 64, 14, 30, 20),
-        (104, 100, "播放速度", "28", 134, 0, 120, 28),
-        (174, 170, "自动播放速度", "关闭", 204, 0, 200, 0),
+        (34, 30, "字体大小", "20", 60, 14, 30, 20),
+        (98, 94, "播放速度", "28", 124, 0, 120, 28),
+        (162, 158, "自动播放速度", "关闭", 188, 0, 200, 0),
     ]
     for ly, sy, label, val, ky, lo, hi, v in rows:
         d.text((14, ly), label, font=f_lab, fill=(207, 194, 203))
         stepper(sy, val)
         slider(ky, lo, hi, v)
-    # 快速播放
-    d.text((14, 244), "快速播放", font=f_lab, fill=(207, 194, 203))
-    for i, (t, on) in enumerate((("关", False), ("开", True))):
-        x = 228 + i * 50
-        d.rounded_rectangle([x, 240, x + 44, 270], radius=15,
-                            fill=(185, 80, 121, 255) if on else (44, 33, 51, 255))
-        ow = d.textlength(t, font=font(FONT, 15))
-        d.text((x + (44 - ow) / 2, 247), t, font=font(FONT, 15),
-               fill=(255, 255, 255) if on else (203, 188, 198))
-    d.text((14, 278), "字号 14~30 px，显示的数字就是 px", font=f_small2, fill=(139, 127, 137))
-    d.text((14, 294), "播放速度＝每字毫秒；自动播放速度＝每句停留毫秒",
+    # 两个开关行：快速播放 / 屏幕常亮
+    for ly, ky, label in ((226, 224, "快速播放"), (260, 258, "屏幕常亮")):
+        d.text((14, ly), label, font=f_lab, fill=(207, 194, 203))
+        for i, (t, on) in enumerate((("关", False), ("开", True))):
+            x = 228 + i * 50
+            d.rounded_rectangle([x, ky, x + 44, ky + 30], radius=15,
+                                fill=(185, 80, 121, 255) if on else (44, 33, 51, 255))
+            ow = d.textlength(t, font=font(FONT, 15))
+            d.text((x + (44 - ow) / 2, ky + 7), t, font=font(FONT, 15),
+                   fill=(255, 255, 255) if on else (203, 188, 198))
+    d.text((14, 292), "字号 14~30 px，显示的数字就是 px", font=f_small2, fill=(139, 127, 137))
+    d.text((14, 306), "播放速度＝每字毫秒；自动播放速度＝每句停留毫秒",
            font=f_small2, fill=(139, 127, 137))
     # 实时预览
-    d.rounded_rectangle([12, 314, 324, 420], radius=14, fill=(18, 13, 19, 235))
-    d.text((24, 320), "林曦", font=font(FONT, 18), fill=(255, 216, 230))
+    d.rounded_rectangle([12, 322, 324, 410], radius=14, fill=(18, 13, 19, 235))
+    d.text((24, 326), "林曦", font=font(FONT, 18), fill=(255, 216, 230))
     d.text((24, 352), "想成为Galgame领域大神！！！", font=f_body, fill=(255, 255, 255))
     for i, t in enumerate(("重置", "返回")):
         x = 50 + i * 122
-        d.rounded_rectangle([x, 430, x + 114, 470], radius=20, fill=(50, 36, 58, 255))
+        d.rounded_rectangle([x, 418, x + 114, 458], radius=20, fill=(50, 36, 58, 255))
         ow = d.textlength(t, font=font(FONT, 18))
-        d.text((x + (114 - ow) / 2, 440), t, font=font(FONT, 18), fill=(255, 255, 255))
-    panels.append((c8, "⑧ 设置（滑块 + −／＋ 步进）"))
+        d.text((x + (114 - ow) / 2, 428), t, font=font(FONT, 18), fill=(255, 255, 255))
+    panels.append((c8, "⑧ 设置（3 滑块 + 快速播放 / 屏幕常亮）"))
 
     # 9. 关于（正文）
     def about_base(with_dots):
@@ -392,7 +393,7 @@ def main(raw, proj):
                 font=font(FONT, 22), fill=(255, 216, 230))
         if with_dots:
             dd.text((286, 10), "···", font=font(FONT, 15), fill=(255, 158, 196))
-        sub = "GalGod · 小米手环 9 Pro 版 · v2.2"
+        sub = "GalGod · 小米手环 9 Pro 版 · v2.3"
         dd.text(((W - dd.textlength(sub, font=font(FONT, 12))) / 2, 36), sub,
                 font=font(FONT, 12), fill=(156, 143, 155))
         rows = [

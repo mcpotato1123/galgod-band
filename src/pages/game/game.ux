@@ -1,8 +1,9 @@
 <template>
   <div class="page" onclick="onTap" onlongpress="toggleImmersive" onswipe="blockSwipe">
 
-    <!-- 背景层 -->
-    <image class="layer" src="{{bgSrc}}" if="{{bgSrc}}" onswipe="blockSwipe"></image>
+    <!-- 背景层：宽幅素材 + CSS transition 缓慢平移，做成全景；
+         没开平移（或素材是窄图）时 bgStyle 为空，退回静态铺满 -->
+    <image class="layer bgw" style="{{bgStyle}}" src="{{bgSrc}}" if="{{bgSrc}}" onswipe="blockSwipe"></image>
     <div class="solid" if="{{showBlack}}"></div>
     <div class="solid-white" if="{{showWhite}}"></div>
 
@@ -89,6 +90,12 @@
   }
 
   .layer { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; object-fit: cover; }
+
+  /* 全景背景：素材宽 PAN_BG_W（= 336 + PAN_RANGE），显示框仍是 336 宽，
+     靠 left 在 0 与 -PAN_RANGE 之间来回移动。位移交给 CSS transition 做，
+     不要自己用定时器逐帧改布局 —— 那在手环上又慢又费电。 */
+  .bgw { width: 504px; height: 480px; object-fit: fill;
+         transition-property: left; transition-duration: 22000ms; }
   .solid { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #000000; }
   .solid-white { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px; background-color: #ffffff; }
 
@@ -165,6 +172,7 @@ import router from '@system.router'
 import storage from '@system.storage'
 import prompt from '@system.prompt'
 import file from '@system.file'
+import brightness from '@system.brightness'
 import { IMG } from '../../common/assets.js'
 import {
   DEFAULT_SETTINGS, autoDelay, loadSettings, saveSettings, paginateText,
@@ -186,6 +194,13 @@ const TEXT_PAD = 6        // 每行右侧留的余量（算每行字数用）
 const TEXT_BOX_H = 122    // 正文区高度：取 122 是为了让最后一行（最长情况 458）
                           // 停在下方的 ▼ 继续提示（462）之上，不压到一起
 const MAX_LINES = 6       // .ln 的槽位数量，必须 >= 字号 14 时的行数
+
+// ---------------------------------------------------------------- 全景背景
+// 背景素材出成 504 宽（见 tools/gen_assets.py 的 BG_W），显示框 336 宽，
+// 两者之差就是可以平移的距离。CSS transition 的时长要和 PAN_MS 一致，
+// 这样每次定时器触发时上一段平移刚好走完。
+const PAN_RANGE = 168      // 可平移距离 px = 素材宽 504 - 屏幕宽 336
+const PAN_MS = 22000       // 单程平移耗时（同时也是 transition-duration）
 const AUTO_DEFAULT = 90    // 从菜单打开自动播放时给的默认停留（毫秒/字）
 
 export default {
@@ -210,6 +225,7 @@ export default {
     speaker: '',
     l0: '', l1: '', l2: '', l3: '', l4: '', l5: '',
     s0: '', s1: '', s2: '', s3: '', s4: '', s5: '',
+    bgStyle: '',
     canTap: false,
     choices: [],
     menu: false,
@@ -239,6 +255,8 @@ export default {
     this.timer = null
     this.autoTimer = null
     this.saveTimer = null
+    this.panTimer = null
+    this.panTick = false
     this.advanceCount = 0
     this.csRaw = []
     this.settings = DEFAULT_SETTINGS
@@ -261,8 +279,9 @@ export default {
         this.autoOn = s.autoMs > 0
         this.fastOn = !!s.fast
         this.applyFont()
+        this.applyScreenKeepOn()
         this.log('设置已载入 size=' + s.size + ' speed=' + s.speed +
-                 ' auto=' + s.auto + ' fast=' + s.fast)
+                 ' auto=' + s.autoMs + ' fast=' + s.fast + ' keepOn=' + s.keepOn)
         this.bootstrap()
       })
     } catch (e) {
@@ -284,15 +303,24 @@ export default {
       this.autoOn = s.autoMs > 0
       this.fastOn = !!s.fast
       this.applyFont()
+      this.applyScreenKeepOn()
     })
+    // 从别的页面切回来时，平移和常亮都要重新开起来
+    if (this.bgSrc) this.startPan()
     if (this.pageText) {
       this.typingToken++
       this.renderTyping(this.pageText.length)
     }
   },
-  onHide() { this.clearTimers(); this.flushAutoSave(); this.flushSeen() },
+  onHide() {
+    this.clearTimers()
+    this.setKeepScreenOn(false)
+    this.flushAutoSave()
+    this.flushSeen()
+  },
   onDestroy() {
     this.clearTimers()
+    this.setKeepScreenOn(false)
     this.flushAutoSave()
     this.flushSeen()
     if (this.watch) { clearTimeout(this.watch); this.watch = null }
@@ -625,9 +653,13 @@ export default {
   },
 
   applyBg(idx) {
-    this.bgSrc = idx >= 0 ? (IMG[idx] || '') : ''
+    const src = idx >= 0 ? (IMG[idx] || '') : ''
+    this.bgSrc = src
     this.showBlack = idx === -1
     this.showWhite = idx === -2
+    // 换背景时**不重置**平移位置：重置会让新图从旧位置慢慢滑回起点（最长要 22 秒），
+    // 很难看。保持当前偏移继续来回平移即可，反正所有背景都是同一宽度。
+    if (src) this.startPan()
   },
 
   renderSprites(cs) {
@@ -784,8 +816,48 @@ export default {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
     if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null }
     this.clearAuto()
+    this.stopPan()
     this.typingToken++
   },
+
+  // ---------------------------------------------------------------- 屏幕常亮
+  // Vela 用 @system.brightness 的 setKeepScreenOn 来保持屏幕常亮。
+  // 必须在 manifest 的 features 里声明 system.brightness，否则调用会抛错。
+  // 包一层 try/catch：万一某些固件没这个接口，也只是不常亮，不能让阅读崩掉。
+  setKeepScreenOn(on) {
+    try {
+      brightness.setKeepScreenOn({ keepScreenOn: !!on })
+    } catch (e) {
+      this.log('设置屏幕常亮失败: ' + (e && e.message ? e.message : e))
+    }
+  },
+
+  applyScreenKeepOn() {
+    const s = this.settings || {}
+    this.setKeepScreenOn(!!s.keepOn)
+  },
+
+  // ---------------------------------------------------------------- 全景背景
+  // 不自己逐帧改布局：把 left 的补间交给 CSS transition（见 .bgw），
+  // 这里只负责「每 PAN_MS 把目标位置换到另一端」。逐帧改布局在手环上又慢又费电。
+  startPan() {
+    if (this.panTimer) return              // 已经在跑就别重开
+    if (!this.bgSrc) { this.bgStyle = ''; return }
+    if (!this.bgStyle) this.bgStyle = 'left: 0px;'
+    this.panTick = false
+    this.panTimer = setTimeout(() => this.panStep(), PAN_MS)
+  },
+
+  panStep() {
+    this.panTimer = null
+    if (!this.bgSrc) { this.bgStyle = ''; return }
+    // 在 0 与 -PAN_RANGE 之间来回；CSS transition 会把它补成一段匀速平移
+    this.panTick = !this.panTick
+    this.bgStyle = 'left: ' + (this.panTick ? -PAN_RANGE : 0) + 'px;'
+    this.panTimer = setTimeout(() => this.panStep(), PAN_MS)
+  },
+
+  stopPan() { if (this.panTimer) { clearTimeout(this.panTimer); this.panTimer = null } },
 
   // ---------------------------------------------------------------- 交互
   onTap() {

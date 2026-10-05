@@ -29,6 +29,12 @@
       <text class="{{$item.cls}}" for="{{rowFast}}" tid="f" onclick="pickFast($idx)" onswipe="ban">{{$item.t}}</text>
     </div>
 
+    <!-- 屏幕常亮（走 @system.brightness 的 setKeepScreenOn） -->
+    <text class="slabel l5">屏幕常亮</text>
+    <div class="fastrow keeprow">
+      <text class="{{$item.cls}}" for="{{rowKeep}}" tid="k" onclick="pickKeep($idx)" onswipe="ban">{{$item.t}}</text>
+    </div>
+
     <text class="hint h1">{{hint1}}</text>
     <text class="hint h2">{{hint2}}</text>
 
@@ -52,25 +58,29 @@
   .title { position: absolute; top: 4px; left: 0px; width: 336px; text-align: center;
            font-size: 21px; color: #ffd8e6; font-weight: bold; }
 
+  /* 5 行设置：3 行「标签+步进+滑块」+ 2 行开关。
+     加了「屏幕常亮」之后行距整体压紧，滑块高度也从 34 收到 32 才放得下。 */
   .slabel { position: absolute; left: 14px; font-size: 16px; color: #cfc2cb; }
-  .l1 { top: 34px; } .l2 { top: 104px; } .l3 { top: 174px; } .l4 { top: 244px; }
+  .l1 { top: 34px; } .l2 { top: 98px; } .l3 { top: 162px; }
+  .l4 { top: 226px; } .l5 { top: 260px; }
 
   /* − / ＋ 步进按钮：滑块万一不生效时的保底操作 */
   .step { position: absolute; width: 32px; height: 28px; border-radius: 14px;
           background-color: #32243a; align-items: center; justify-content: center; }
   .step-t { font-size: 18px; color: #ffffff; }
   .m1 { left: 196px; top: 30px; } .p1 { left: 286px; top: 30px; }
-  .m2 { left: 196px; top: 100px; } .p2 { left: 286px; top: 100px; }
-  .m3 { left: 196px; top: 170px; } .p3 { left: 286px; top: 170px; }
+  .m2 { left: 196px; top: 94px; } .p2 { left: 286px; top: 94px; }
+  .m3 { left: 196px; top: 158px; } .p3 { left: 286px; top: 158px; }
 
   .sval { position: absolute; left: 232px; width: 50px; text-align: center;
           font-size: 15px; color: #ffb3cd; }
-  .v1 { top: 35px; } .v2 { top: 105px; } .v3 { top: 175px; }
+  .v1 { top: 35px; } .v2 { top: 99px; } .v3 { top: 163px; }
 
-  .sld { position: absolute; left: 14px; width: 308px; height: 34px; }
-  .k1 { top: 64px; } .k2 { top: 134px; } .k3 { top: 204px; }
+  .sld { position: absolute; left: 14px; width: 308px; height: 32px; }
+  .k1 { top: 60px; } .k2 { top: 124px; } .k3 { top: 188px; }
 
-  .fastrow { position: absolute; top: 240px; left: 228px; flex-direction: row; }
+  .fastrow { position: absolute; top: 224px; left: 228px; flex-direction: row; }
+  .keeprow { top: 258px; }
   .pill { width: 44px; height: 30px; border-radius: 15px; background-color: #2c2133;
           align-items: center; justify-content: center; margin-left: 6px;
           font-size: 15px; color: #cbbcc6; }
@@ -80,15 +90,15 @@
 
   .hint { position: absolute; left: 14px; width: 308px; font-size: 12px;
           color: #8b7f89; lines: 1; }
-  .h1 { top: 278px; }
-  .h2 { top: 294px; }
+  .h1 { top: 292px; }
+  .h2 { top: 306px; }
 
-  .pv { position: absolute; top: 314px; left: 12px; width: 312px; height: 106px;
+  .pv { position: absolute; top: 322px; left: 12px; width: 312px; height: 88px;
         background-color: rgba(18, 13, 19, 0.92); border-radius: 14px; }
-  .pv-name { position: absolute; top: 6px; left: 12px; color: #ffd8e6; font-weight: bold; }
-  .pv-line { position: absolute; top: 38px; left: 12px; width: 290px; color: #ffffff; lines: 1; }
+  .pv-name { position: absolute; top: 4px; left: 12px; color: #ffd8e6; font-weight: bold; }
+  .pv-line { position: absolute; top: 36px; left: 12px; width: 290px; color: #ffffff; lines: 1; }
 
-  .row { position: absolute; top: 430px; left: 50px; width: 236px;
+  .row { position: absolute; top: 418px; left: 50px; width: 236px;
          flex-direction: row; justify-content: space-between; }
   .btn { height: 40px; border-radius: 20px; background-color: #32243a;
          align-items: center; justify-content: center; }
@@ -123,6 +133,7 @@ export default {
     speedText: '',
     autoText: '',
     rowFast: [],
+    rowKeep: [],
     hint1: '',
     hint2: '',
     pvStyle: 'font-size: 20px; line-height: 24px;',
@@ -156,6 +167,9 @@ export default {
 
     this.rowFast = ['关', '开'].map((t, i) => ({
       t: t, cls: (!!s.fast === !!i) ? 'pill-on' : 'pill'
+    }))
+    this.rowKeep = ['关', '开'].map((t, i) => ({
+      t: t, cls: (!!s.keepOn === !!i) ? 'pill-on' : 'pill'
     }))
 
     this.hint1 = '字号 ' + SIZE_MIN + '~' + SIZE_MAX + ' px，显示的数字就是 px'
@@ -256,6 +270,12 @@ export default {
     const patch = { fast: i === 1 }
     if (patch.fast) patch.autoMs = 0
     this.apply(patch)
+    this.flush()
+  },
+
+  pickKeep(i) {
+    this.lock()
+    this.apply({ keepOn: i === 1 })
     this.flush()
   },
 

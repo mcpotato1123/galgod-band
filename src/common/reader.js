@@ -20,7 +20,8 @@ export const DEFAULT_SETTINGS = {
   size: 20,       // 正文字号 px
   speed: 28,      // 打字机 每字毫秒
   autoMs: 0,      // 自动播放 每字停留毫秒（0 = 关）
-  fast: false     // 快速播放（瞬间出字 + 连播，遇到选项/结局自动停）
+  fast: false,    // 快速播放（瞬间出字 + 连播，遇到选项/结局自动停）
+  keepOn: true    // 阅读时屏幕常亮（走 @system.brightness）
 }
 
 export const MAX_SLOTS = 6
@@ -37,6 +38,9 @@ export function normalizeSettings(raw) {
   s.speed = clampInt(s.speed, SPEED_MIN, SPEED_MAX, DEFAULT_SETTINGS.speed)
   s.autoMs = clampInt(s.autoMs, AUTO_MIN, AUTO_MAX, DEFAULT_SETTINGS.autoMs)
   s.fast = !!s.fast
+  // keepOn 默认是 true，所以不能用 !!s.keepOn —— 老存档里没有这个键时会被压成 false
+  s.keepOn = (s.keepOn === undefined || s.keepOn === null)
+    ? DEFAULT_SETTINGS.keepOn : !!s.keepOn
   // 旧版本存的是 auto(bool) + autoSpeed 三档，这里直接丢掉、走默认
   delete s.auto
   delete s.autoSpeed
