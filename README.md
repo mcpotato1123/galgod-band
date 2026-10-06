@@ -2,7 +2,10 @@
 
 把 PC 版 Ren'Py galgame **GalGod 1.0.0** 移植成能在**小米手环 9 Pro**（336×480 矩形 AMOLED）上跑的 **Vela 快应用**。
 
-引擎与 UI 参照开源工程 [qihe114514/galgaoshou-vela](https://github.com/qihe114514/galgaoshou-vela)（《难道你是GAL高手》手环移植）的架构：**索引 + 分块剧本的流式阅读器 + 声明式图片绑定 + storage 存档**。
+**引擎与 UI**
+> 1.x版本参照开源工程 [qihe114514/galgaoshou-vela](https://github.com/qihe114514/galgaoshou-vela)（《难道你是GAL高手》手环移植）的架构：**索引 + 分块剧本的流式阅读器 + 声明式图片绑定 + storage 存档**。
+
+> 2.x版本重构所有代码，转为自研引擎，但部分代码仍参考qihe114514的引擎
 
 ```
 剧本数据  5,569 个节点 / 18 章 / 44 个分块
