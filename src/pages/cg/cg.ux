@@ -46,6 +46,10 @@
 
       <div class="vclose" onclick="closeView" onswipe="ban"><text class="vclose-t">关闭</text></div>
 
+      <!-- 提示 + 位置条下面垫一层半透明底板。
+           CG 有的是浅色（白裙子那种），纯文字直接压上去几乎看不清 ——
+           做上架截图时发现的，不只是截图问题。 -->
+      <div class="hintplate"></div>
       <text class="vhint2">按住画面左右拖动，看被裁掉的部分</text>
       <!-- 位置指示：滑块宽度 = 屏幕宽/图宽，位置 = 当前看到哪一段。
            既是给玩家的反馈，也是在"拖不动"时能一眼看出卡在哪儿的诊断手段。 -->
@@ -110,13 +114,17 @@
             align-items: center; justify-content: center; }
   .vclose-t { font-size: 17px; color: #ffe6ef; }
 
+  /* 提示区的半透明底板：浅色 CG 上纯文字看不清 */
+  .hintplate { position: absolute; top: 384px; left: 14px; width: 308px; height: 38px;
+               border-radius: 12px; background-color: rgba(0, 0, 0, 0.5); }
+
   /* 提示放在底栏上方，别和底栏重叠（2.3.3 上 top:424 撞上了 top:428 的底栏） */
-  .vhint2 { position: absolute; top: 392px; left: 0px; width: 336px; text-align: center;
-            font-size: 13px; color: rgba(226, 214, 224, 0.78); }
+  .vhint2 { position: absolute; top: 390px; left: 0px; width: 336px; text-align: center;
+            font-size: 13px; color: rgba(232, 222, 230, 0.92); }
 
   /* 位置指示条：轨道 240 宽，滑块宽度按 屏幕宽/图宽 算（336/854 ≈ 94） */
   .track { position: absolute; top: 412px; left: 48px; width: 240px; height: 5px;
-           border-radius: 3px; background-color: rgba(255, 255, 255, 0.22); }
+           border-radius: 3px; background-color: rgba(255, 255, 255, 0.28); }
   .thumb2 { position: absolute; top: 0px; left: 0px; width: 94px; height: 5px;
             border-radius: 3px; background-color: #ffd8e6; }
 

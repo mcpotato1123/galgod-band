@@ -333,6 +333,64 @@ if (fs.existsSync(genAssets)) {
   console.log('图片 object-fit ✔  所有给定宽高的 <image> 都写了');
 }
 
+// ---- 每个设置项都要登记「由哪个页面控制」，并核对那个页面真的引用了它
+//      加设置项时最容易漏的就是这一步：reader.js 加了键、game.ux 读了它，
+//      但没有任何界面能改 —— 用户永远碰不到，而且构建和运行都不报错。
+{
+  // 新加设置项时必须在这里登记，否则下面第一条就会报错。
+  const CONTROL_SITE = {
+    size: 'settings',
+    speed: 'settings',
+    autoMs: 'settings',
+    keepOn: 'settings',
+    longpress: 'settings',
+    // 快进**故意**不放在设置页：阅读时随手在菜单里开关比翻到设置页方便。
+    fast: 'game',
+  };
+  const SITE_FILE = {
+    settings: path.join(proj, 'src', 'pages', 'settings', 'settings.ux'),
+    game: path.join(proj, 'src', 'pages', 'game', 'game.ux'),
+  };
+
+  const rj = fs.readFileSync(path.join(proj, 'src', 'common', 'reader.js'), 'utf8');
+  const blk = (rj.match(/DEFAULT_SETTINGS\s*=\s*\{([\s\S]*?)\}/) || [])[1] || '';
+  const keys = [];
+  let km;
+  const reKey = /(\w+)\s*:/g;
+  while ((km = reKey.exec(blk))) keys.push(km[1]);
+
+  if (keys.length) {
+    const unreg = keys.filter((k) => !CONTROL_SITE[k]);
+    if (unreg.length) {
+      console.error('✖ 这些设置项没有登记控制入口（tests 里的 CONTROL_SITE）：\n    ' +
+        unreg.join('\n    ') +
+        '\n    reader.js 的 DEFAULT_SETTINGS 里加了键，但没告诉测试由哪个页面控制它，' +
+        '\n    很可能界面里也就忘了加 —— 用户改不到，而且不会报错。');
+      process.exit(1);
+    }
+    const orphan = Object.keys(CONTROL_SITE).filter((k) => keys.indexOf(k) < 0);
+    if (orphan.length) {
+      console.error('✖ CONTROL_SITE 里登记了 DEFAULT_SETTINGS 里没有的键：\n    ' +
+        orphan.join('\n    '));
+      process.exit(1);
+    }
+    const bad = [];
+    for (const k of keys) {
+      const f = SITE_FILE[CONTROL_SITE[k]];
+      const code3 = stripComments(fs.readFileSync(f, 'utf8'));
+      if (!new RegExp('\\b' + k + '\\b').test(code3)) {
+        bad.push(k + ' 登记在 ' + CONTROL_SITE[k] + '，但那个文件里找不到它');
+      }
+    }
+    if (bad.length) {
+      console.error('✖ 设置项与登记的入口对不上：\n    ' + bad.join('\n    '));
+      process.exit(1);
+    }
+    console.log('设置项入口 ✔  ' + keys.length + ' 项：' +
+      keys.map((k) => k + '(' + CONTROL_SITE[k] + ')').join(' '));
+  }
+}
+
 // ---- 关于页：它把每行字数写成常量 CPL，也要核对「CPL × 字号 ≤ 行宽」
 const aboutPath = path.join(proj, 'src', 'pages', 'about', 'about.ux');
 if (fs.existsSync(aboutPath)) {

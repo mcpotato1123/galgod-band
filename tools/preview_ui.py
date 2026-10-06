@@ -10,9 +10,17 @@ UI 效果预览图生成器
 """
 import io, os, re, sys, json
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 W, H = 336, 480
+
+# 单张截图的画布尺寸。
+# 上架平台的预览框比例和设备屏（336:480 = 0.7）不一致，它会**按框拉满** ——
+# 真机反馈过：336x480 的图在平台里被横向拉伸。
+# 实测平台框约 0.8（4:5），所以出图时把整屏截图居中放进 384x480 的画布，
+# 两侧用自身模糊放大补边：既不变形，也不像生硬的黑边。
+# 平台比例若不是 4:5，只改这两个数即可。
+SHOT_BOX_W, SHOT_BOX_H = 384, 480
 SP_W, SP_H = 143, 380
 SP_X = {"left": 10, "center": 96, "right": 182}
 SP_TOP = 100
@@ -94,8 +102,10 @@ def draw_hud(canvas, f_title, f_prog, title, progress):
     d.text((22, 13), title, font=f_title, fill=(255, 230, 239))
     d.text((22 + d.textlength(title, font=f_title) + 8, 15), progress,
            font=f_prog, fill=(185, 176, 182))
-    d.rounded_rectangle([290, 8, 326, 44], radius=18, fill=(27, 21, 32, 209))
-    d.text((301, 14), "≡", font=font(FONT, 24), fill=(255, 216, 230))
+    # 右上角菜单按钮：放大到 52x52（原来 36，手环上不好点）
+    d.rounded_rectangle([278, 6, 330, 58], radius=26, fill=(27, 21, 32, 209))
+    ow = d.textlength("≡", font=font(FONT, 30))
+    d.text((278 + (52 - ow) / 2, 14), "≡", font=font(FONT, 30), fill=(255, 216, 230))
     canvas.alpha_composite(layer)
 
 
@@ -115,6 +125,37 @@ def draw_panel(canvas, f_name, f_body, speaker, lines, can_tap=True):
     if can_tap:
         d.text((308, MORE_AT), "▼", font=font(FONT, 16), fill=(255, 158, 196))
     canvas.alpha_composite(layer)
+
+
+# 剧本节点里的台词在 "x" 字段，"p" 是**运行时算出来的分页**，静态数据里永远是空的。
+# 之前预览脚本读的是 "p"，所以正文和 CG 面板一直画不出台词（空底板）。
+# 这里按 reader.js 的 wrapText 规则自己折行，保证预览和真机显示一致。
+BREAK_AFTER = '，。！？；：、）」』…—'
+
+
+def first_page(text, cpl=15, lpp=5):
+    """按 reader.js 的 wrapText + paginateText 取第一页（字号 20 时 cpl=15, lpp=5）"""
+    lines = []
+    for raw in str(text or '').split('\n'):
+        s = raw
+        if s == '':
+            lines.append('')
+            continue
+        while len(s) > cpl:
+            cut = cpl
+            lo = max(2, cpl - 8)
+            k = cpl
+            while k > lo:
+                if BREAK_AFTER.find(s[k - 1]) >= 0:
+                    cut = k
+                    break
+                k -= 1
+            lines.append(s[:cut])
+            s = s[cut:]
+        lines.append(s)
+    if not lines:
+        lines = ['']
+    return lines[:lpp]
 
 
 def draw_choices(canvas, f_body, labels):
@@ -139,7 +180,7 @@ def draw_menu(canvas, f_title, f_sub, f_btn):
     sub = "第三幕 · 天选试 · 42%"
     d.text(((W - d.textlength(sub, font=f_sub)) / 2, 50), sub, font=f_sub, fill=(164, 151, 159))
     items = [("继续阅读", True), ("保存进度", False), ("读取存档", False),
-             ("自动播放：关", False), ("快速播放：开", False), ("跳到下一章", False)]
+             ("自动播放：关", False), ("快进：开", False), ("跳到下一章", False)]
     y = 75
     for txt, main in items:
         d.rounded_rectangle([48, y, 288, y + 36], radius=18,
@@ -195,12 +236,35 @@ def main(raw, proj):
                 scene = (i, n)
                 break
 
-    # 找一个 CG 场景
+    # 找一个 CG 场景。
+    # 默认取剧本里第一处 CG，但那张刚好是张张开大嘴的搞笑图，当宣传图不合适；
+    # 所以优先挑这几张氛围好的（存在就用），都不在才退回第一处。
+    # **必须同时有台词** —— 只挂 CG 没有文本的节点做出来是一块空底板，很难看。
+    PREFER_CG = ("cg_notella_descend_full", "cg_notella_descend", "cg_006", "cg_005")
+
+    def has_text(n):
+        return bool((n.get("x") or "").strip())
+
     cgscene = None
-    for i, n in enumerate(nodes):
-        if n.get("t") == "s" and n.get("cg") is not None and n["cg"] >= 0:
-            cgscene = (i, n)
+    for want in PREFER_CG:
+        for i, n in enumerate(nodes):
+            if n.get("t") != "s" or n.get("cg") is None or n["cg"] < 0:
+                continue
+            if not has_text(n):
+                continue
+            if os.path.basename(img[n["cg"]]).startswith(want):
+                cgscene = (i, n)
+                break
+        if cgscene:
             break
+    if cgscene is None:
+        for i, n in enumerate(nodes):
+            if (n.get("t") == "s" and n.get("cg") is not None and n["cg"] >= 0
+                    and has_text(n)):
+                cgscene = (i, n)
+                break
+    if cgscene:
+        print("  CG 面板用: %s" % os.path.basename(img[cgscene[1]["cg"]]))
 
     # 找一个分支
     choices = None
@@ -221,7 +285,7 @@ def main(raw, proj):
         if ci >= cc["start"]:
             cur = k
     draw_hud(c, f_small, f_tiny, ch[cur]["title"], "38%")
-    draw_panel(c, f_name, f_body, cn.get("n") or "", (cn.get("p") or [""])[0].split("\n"))
+    draw_panel(c, f_name, f_body, cn.get("n") or "", first_page(cn.get("x")))
     panels.append((c, "① 正文（背景 + 双立绘 + 对白）"))
 
     # 2. 分支选择
@@ -237,8 +301,7 @@ def main(raw, proj):
     if cgscene:
         cgimg = Image.open(px(proj, img[cgscene[1]["cg"]])).convert("RGBA")
         c3.alpha_composite(cgimg, (0, 0))
-        draw_panel(c3, f_name, f_body, cgscene[1].get("n") or "",
-                   (cgscene[1].get("p") or [""])[0].split("\n"))
+        draw_panel(c3, f_name, f_body, cgscene[1].get("n") or "", first_page(cgscene[1].get("x")))
     panels.append((c3, "③ CG 插入（满屏铺满，底板变透）"))
 
     # 4. 阅读菜单
@@ -306,7 +369,7 @@ def main(raw, proj):
     d = ImageDraw.Draw(c7)
     tw = d.textlength("CG 鉴赏", font=f_big)
     d.text(((W - tw) / 2, 10), "CG 鉴赏", font=f_big, fill=(255, 216, 230))
-    hint = "已解锁 2 / %d 组 · 点按查看" % max(1, len(cgg))
+    hint = "已解锁 3 / %d 组 · 点按查看" % max(1, len(cgg))
     tw2 = d.textlength(hint, font=f_tiny)
     d.text(((W - tw2) / 2, 44), hint, font=f_tiny, fill=(156, 143, 155))
     f_nm2 = font(FONT, 21)
@@ -315,7 +378,7 @@ def main(raw, proj):
         y = 74 + i * 86
         d.rounded_rectangle([12, y, 324, y + 74], radius=16, fill=(36, 28, 44, 255))
         g = cgg[i] if i < len(cgg) else None
-        unlocked = i < 2
+        unlocked = i < 3
         if g and unlocked:
             th = Image.open(px(proj, g["th"])).convert("RGB").resize((96, 54), Image.LANCZOS)
             c7.paste(th, (22, y + 10))
@@ -333,6 +396,55 @@ def main(raw, proj):
     tw3 = d.textlength("返回", font=f_btn)
     d.text(((W - tw3) / 2, 441), "返回", font=f_btn, fill=(255, 255, 255))
     panels.append((c7, "⑦ CG 鉴赏（缩略图 + 解锁状态）"))
+
+    # 8. CG 鉴赏：打开大图
+    # CG 是一张 854 宽的宽图，查看器 336 宽、靠 left 决定看哪一段；
+    # 打开时停在正中间（cg.ux 里 setPan(CG_PAN_RANGE / 2)）。
+    c8cg = Image.new("RGB", (W, H), (0, 0, 0))
+    CGW = 854
+    pan = (CGW - W) // 2                     # 居中 -> 259
+    # 用第 3 组（「小涟」，3 张）—— 图好看，而且有 3 张才能体现 ‹ › 换差分与张数计数。
+    # 它在上面的列表里也是解锁状态，两格不矛盾。
+    vgroup = cgg[2] if len(cgg) > 2 else (cgg[0] if cgg else None)
+    vgname = vgroup["n"] if vgroup else ""
+    vtotal = len(vgroup["im"]) if vgroup else 0
+    vpage = 2 if vtotal >= 2 else 1
+    vimg = vgroup["im"][vpage - 1] if vgroup else None
+    if vimg is not None:
+        src_path = img[vimg]
+        big = Image.open(px(proj, src_path)).convert("RGB")
+        big = big.resize((CGW, H), Image.LANCZOS) if big.size != (CGW, H) else big
+        c8cg.paste(big, (-pan, 0))           # 负偏移，超出部分自动裁掉
+    c8cg = c8cg.convert("RGBA")
+    d = ImageDraw.Draw(c8cg)
+    # 顶部：组名 + 第几张
+    d.text((14, 12), vgname or "", font=font(FONT, 16), fill=(255, 230, 239))
+    vnum = "%d / %d" % (vpage, vtotal)
+    d.text((14 + d.textlength(vgname or "", font=font(FONT, 16)) + 10, 13), vnum,
+           font=font(FONT, 15), fill=(216, 203, 210))
+    # 关闭
+    d.rounded_rectangle([262, 10, 326, 44], radius=17, fill=(0, 0, 0, 158))
+    tw4 = d.textlength("关闭", font=font(FONT, 17))
+    d.text((262 + (64 - tw4) / 2, 17), "关闭", font=font(FONT, 17), fill=(255, 230, 239))
+    # 拖动提示（下面垫一层半透明底板：浅色 CG 上纯文字看不清）
+    d.rounded_rectangle([14, 384, 322, 422], radius=12, fill=(0, 0, 0, 128))
+    hint = "按住画面左右拖动，看被裁掉的部分"
+    d.text(((W - d.textlength(hint, font=font(FONT, 13))) / 2, 392), hint,
+           font=font(FONT, 13), fill=(232, 222, 230, 235))
+    # 位置指示条：轨道 240，滑块 94（= 屏幕宽/图宽），居中时在正中间
+    d.rounded_rectangle([48, 412, 288, 417], radius=3, fill=(255, 255, 255, 71))
+    tx = 48 + int((240 - 94) * (float(pan) / (CGW - W)))
+    d.rounded_rectangle([tx, 412, tx + 94, 417], radius=3, fill=(255, 216, 230, 255))
+    # 底栏：‹ 换一张差分 ›
+    d.rounded_rectangle([22, 428, 314, 470], radius=21, fill=(0, 0, 0, 158))
+    for bx, ch in ((28, "‹"), (262, "›")):
+        d.rounded_rectangle([bx, 432, bx + 46, 466], radius=17, fill=(50, 36, 58, 255))
+        cw = d.textlength(ch, font=font(FONT, 22))
+        d.text((bx + (46 - cw) / 2, 437), ch, font=font(FONT, 22), fill=(255, 255, 255))
+    lbl = "换一张差分"
+    d.text(((W - d.textlength(lbl, font=font(FONT, 14))) / 2, 441), lbl,
+           font=font(FONT, 14), fill=(226, 214, 224, 204))
+    panels.append((c8cg, "⑧ CG 鉴赏「打开大图」（可拖动看全图）"))
 
     # 8. 设置（滑块 + 步进按钮）
     c8 = Image.new("RGBA", (W, H), (20, 16, 26, 255))
@@ -354,11 +466,11 @@ def main(raw, proj):
 
     def stepper(y, val):
         for x, s in ((196, "−"), (286, "＋")):
-            d.rounded_rectangle([x, y, x + 32, y + 28], radius=14, fill=(50, 36, 58, 255))
-            ow = d.textlength(s, font=font(FONT, 18))
-            d.text((x + (32 - ow) / 2, y + 3), s, font=font(FONT, 18), fill=(255, 255, 255))
+            d.rounded_rectangle([x, y, x + 32, y + 26], radius=13, fill=(50, 36, 58, 255))
+            ow = d.textlength(s, font=font(FONT, 17))
+            d.text((x + (32 - ow) / 2, y + 2), s, font=font(FONT, 17), fill=(255, 255, 255))
         vw = d.textlength(val, font=f_val)
-        d.text((232 + (50 - vw) / 2, y + 5), val, font=f_val, fill=(255, 179, 205))
+        d.text((232 + (50 - vw) / 2, y + 4), val, font=f_val, fill=(255, 179, 205))
 
     rows = [
         (34, 30, "字体大小", "20", 60, 14, 30, 20),
@@ -369,8 +481,8 @@ def main(raw, proj):
         d.text((14, ly), label, font=f_lab, fill=(207, 194, 203))
         stepper(sy, val)
         slider(ky, lo, hi, v)
-    # 两个开关行：快速播放 / 屏幕常亮
-    for ly, ky, label in ((226, 224, "快速播放"), (260, 258, "屏幕常亮")):
+    # 两个开关行：屏幕常亮 / 长按隐藏界面（快进不在这里，它在阅读菜单里）
+    for ly, ky, label in ((228, 226, "屏幕常亮"), (262, 260, "长按隐藏界面")):
         d.text((14, ly), label, font=f_lab, fill=(207, 194, 203))
         for i, (t, on) in enumerate((("关", False), ("开", True))):
             x = 228 + i * 50
@@ -379,19 +491,19 @@ def main(raw, proj):
             ow = d.textlength(t, font=font(FONT, 15))
             d.text((x + (44 - ow) / 2, ky + 7), t, font=font(FONT, 15),
                    fill=(255, 255, 255) if on else (203, 188, 198))
-    d.text((14, 292), "字号 14~30 px，显示的数字就是 px", font=f_small2, fill=(139, 127, 137))
-    d.text((14, 306), "播放速度＝每字毫秒；自动播放速度＝每句停留毫秒",
+    d.text((14, 296), "字号 14~30 px，显示的数字就是 px", font=f_small2, fill=(139, 127, 137))
+    d.text((14, 310), "播放速度＝每字毫秒；自动播放速度＝每句停留毫秒",
            font=f_small2, fill=(139, 127, 137))
     # 实时预览
-    d.rounded_rectangle([12, 322, 324, 410], radius=14, fill=(18, 13, 19, 235))
-    d.text((24, 326), "林曦", font=font(FONT, 18), fill=(255, 216, 230))
-    d.text((24, 352), "想成为Galgame领域大神！！！", font=f_body, fill=(255, 255, 255))
+    d.rounded_rectangle([12, 326, 324, 414], radius=14, fill=(18, 13, 19, 235))
+    d.text((24, 330), "林曦", font=font(FONT, 18), fill=(255, 216, 230))
+    d.text((24, 356), "想成为Galgame领域大神！！！", font=f_body, fill=(255, 255, 255))
     for i, t in enumerate(("重置", "返回")):
         x = 50 + i * 122
-        d.rounded_rectangle([x, 418, x + 114, 458], radius=20, fill=(50, 36, 58, 255))
+        d.rounded_rectangle([x, 420, x + 114, 460], radius=20, fill=(50, 36, 58, 255))
         ow = d.textlength(t, font=font(FONT, 18))
-        d.text((x + (114 - ow) / 2, 428), t, font=font(FONT, 18), fill=(255, 255, 255))
-    panels.append((c8, "⑧ 设置（3 滑块 + 快速播放 / 屏幕常亮）"))
+        d.text((x + (114 - ow) / 2, 430), t, font=font(FONT, 18), fill=(255, 255, 255))
+    panels.append((c8, "⑨ 设置（3 滑块 + 屏幕常亮 / 长按隐藏）"))
 
     # 9. 关于（正文）
     def about_base(with_dots):
@@ -401,7 +513,15 @@ def main(raw, proj):
                 font=font(FONT, 22), fill=(255, 216, 230))
         if with_dots:
             dd.text((286, 10), "···", font=font(FONT, 15), fill=(255, 158, 196))
-        sub = "GalGod · 小米手环 9 Pro 版 · v2.3.6"
+        # 版本号从 manifest.json 读，不要在脚本里写死 ——
+        # 写死过，结果截图里还挂着 v2.3.6 而实际已经是 2.3。
+        try:
+            _mf = json.load(io.open(os.path.join(proj, "src", "manifest.json"),
+                                    encoding="utf-8"))
+            _ver = _mf.get("versionName", "?")
+        except Exception:
+            _ver = "?"
+        sub = "GalGod · 小米手环 9 Pro 版 · v%s" % _ver
         dd.text(((W - dd.textlength(sub, font=font(FONT, 12))) / 2, 36), sub,
                 font=font(FONT, 12), fill=(156, 143, 155))
         rows = [
@@ -429,7 +549,7 @@ def main(raw, proj):
         dd.text(((W - tw) / 2, 441), "返回", font=f_btn, fill=(255, 255, 255))
         return c
 
-    panels.append((about_base(False), "⑨ 关于（故事梗概 / 版权信息，可滚动）"))
+    panels.append((about_base(False), "⑩ 关于（故事梗概 / 版权信息，可滚动）"))
 
     # 10. 彩蛋菜单
     c10 = about_base(True)
@@ -444,7 +564,7 @@ def main(raw, proj):
                             fill=(42, 32, 51, 255) if i == 2 else (58, 43, 69, 255))
         tw = d.textlength(t, font=font(FONT, 17))
         d.text((60 + (216 - tw) / 2, y + 10), t, font=font(FONT, 17), fill=(255, 255, 255))
-    panels.append((c10, "⑩ 彩蛋：连点「关于」7 次"))
+    panels.append((c10, "⑪ 彩蛋：连点「关于」7 次"))
 
     # 拼图（标签放在每格上方的独立条里，避免压住界面）
     cols, gap, pad, lab = 3, 10, 16, 26
@@ -468,6 +588,39 @@ def main(raw, proj):
     sheet.save(dst, "PNG", optimize=True)
     print("已生成: %s  %dx%d  %.0f KB" % (dst, sheet.width, sheet.height,
                                           os.path.getsize(dst) / 1024))
+
+    # 另外把每格单独存成一张图 —— 上架平台要的是**多张截图**，不是拼图。
+    # 尺寸就是设备原生分辨率 336x480，和真机截图一致。
+    # 优先放到同级的上架素材目录（用户直接拿去上传）；仓库里没有那个目录时，
+    # 退回 preview/shots/，免得往仓库外面乱写。
+    ab = os.path.abspath(os.path.join(proj, "..", "AstroBox上架"))
+    shots = os.path.join(ab, "截图") if os.path.isdir(ab) else os.path.join(out, "shots")
+    os.makedirs(shots, exist_ok=True)
+    for f in os.listdir(shots):
+        # 只删自己产出的那 10 张（01- ~ 10-）；
+        # 00-版权声明.png 是上架素材里的另一张，由 AstroBox上架/tools/gen_cover.py 生成，
+        # 不能顺手删掉。
+        if f.endswith(".png") and re.match(r"^(0[1-9]|1[01])-", f):
+            os.remove(os.path.join(shots, f))
+    names = ["正文", "分支选项", "CG插入", "阅读菜单", "主页",
+             "章节选择", "CG鉴赏", "CG查看", "设置", "关于", "彩蛋"]
+
+    # 上架平台的预览框比例和设备屏不一致，会把图**拉满**导致变形
+    # （真机上反馈过：336x480 的截图在平台里被横向拉伸）。
+    # 所以出图时把整屏截图放进 SHOT_BOX 比例的画布里，两侧用自身模糊放大补边 ——
+    # 既不变形，也不像生硬的黑边。
+    BOX_W, BOX_H = SHOT_BOX_W, SHOT_BOX_H
+    for i, (p, txt) in enumerate(panels):
+        nm = names[i] if i < len(names) else ("panel%d" % (i + 1))
+        f = os.path.join(shots, "%02d-%s.png" % (i + 1, nm))
+        shot = p.convert("RGB").resize((W, H), Image.LANCZOS)
+        bg = shot.resize((BOX_W, BOX_H), Image.LANCZOS)
+        bg = bg.filter(ImageFilter.GaussianBlur(20))
+        bg = ImageEnhance.Brightness(bg).enhance(0.42)
+        bg.paste(shot, ((BOX_W - W) // 2, (BOX_H - H) // 2))
+        bg.save(f, "PNG", optimize=True)
+    print("单张截图 %d 张 -> %s  (画布 %dx%d，设备屏 %dx%d 居中)"
+          % (len(panels), shots, BOX_W, BOX_H, W, H))
 
 
 def _cli():

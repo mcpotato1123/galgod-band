@@ -73,7 +73,7 @@
       <div class="mbtn" onclick="goSave" onswipe="blockSwipe"><text class="mbtn-t">保存进度</text></div>
       <div class="mbtn" onclick="goLoad" onswipe="blockSwipe"><text class="mbtn-t">读取存档</text></div>
       <div class="mbtn" onclick="toggleAuto" onswipe="blockSwipe"><text class="mbtn-t">自动播放：{{autoOn ? '开' : '关'}}</text></div>
-      <div class="mbtn" onclick="toggleFast" onswipe="blockSwipe"><text class="mbtn-t">快速播放：{{fastOn ? '开' : '关'}}</text></div>
+      <div class="mbtn" onclick="toggleFast" onswipe="blockSwipe"><text class="mbtn-t">快进：{{fastOn ? '开' : '关'}}</text></div>
       <div class="mbtn" onclick="nextChapter" onswipe="blockSwipe"><text class="mbtn-t">跳到下一章</text></div>
       <div class="mrow">
         <div class="mbtn mbtn-half" onclick="goChapters" onswipe="blockSwipe"><text class="mbtn-t">章节</text></div>
@@ -132,9 +132,11 @@
   .hud-t { font-size: 17px; color: #ffe6ef; }
   .hud-p { font-size: 15px; color: #b9b0b6; margin-left: 8px; }
 
-  .menu-btn { position: absolute; top: 8px; left: 290px; width: 36px; height: 36px; border-radius: 18px;
+  /* 右上角菜单按钮：原来 36x36 太小，手环上不好点。
+     放大到 52x52（贴右边缘留 6px 外边距），图标也放大。 */
+  .menu-btn { position: absolute; top: 6px; left: 278px; width: 52px; height: 52px; border-radius: 26px;
               background-color: rgba(27, 21, 32, 0.82); align-items: center; justify-content: center; }
-  .menu-ico { font-size: 24px; color: #ffd8e6; }
+  .menu-ico { font-size: 30px; color: #ffd8e6; }
 
   /* 底板 330..480。说话人单独浮在底板上方（298），不再贴着底板边缘。
      两种底板用同一套几何：只改透明度，避免看 CG 时底板下移、说话人半悬在边缘上。 */
@@ -828,14 +830,15 @@ export default {
   scheduleAuto() {
     this.clearAuto()
     if (this.choices.length || this.endText) return
-    // 快速播放：瞬间出字 + 220ms 连播；遇到选项/结局由上面两行自动停下
+    // 快进：瞬间出字 + 220ms 连播；遇到选项/结局由上面两行自动停下。
+    // 走 advance() 而不是 onTap()，否则会被 400ms 的防抖锁吃掉（见 advance 的说明）。
     if (this.settings.fast) {
-      this.autoTimer = setTimeout(() => { this.autoTimer = null; this.onTap() }, 220)
+      this.autoTimer = setTimeout(() => { this.autoTimer = null; this.advance() }, 220)
       return
     }
     if (!this.settings.autoMs) return
     const wait = autoDelay(this.pageText, this.settings.autoMs)
-    this.autoTimer = setTimeout(() => { this.autoTimer = null; this.onTap() }, wait)
+    this.autoTimer = setTimeout(() => { this.autoTimer = null; this.advance() }, wait)
   },
 
   clearAuto() { if (this.autoTimer) { clearTimeout(this.autoTimer); this.autoTimer = null } },
@@ -888,8 +891,17 @@ export default {
   stopBgPan() { if (this.bgTimer) { clearInterval(this.bgTimer); this.bgTimer = null } },
 
   // ---------------------------------------------------------------- 交互
+  // 物理点击：先过 400ms 防抖锁（避免一次触摸被识别成两下）
   onTap() {
     if (this.lockTap && Date.now() - this.lockTap < 400) return
+    this.advance()
+  },
+
+  // 真正的推进逻辑。**自动播放 / 快进也走这里，而不是 onTap()** ——
+  // toggleFast() / closeMenu() 都会先 lock() 一下，
+  // 而快进的定时器只有 220ms，走 onTap() 会被 400ms 的锁吃掉、而且不会重新排，
+  // 链条就断了。真机上表现为「开了快进还要再点一下屏幕才开始」。
+  advance() {
     if (this.endText) { router.replace({ uri: 'pages/index' }); return }
     if (this.menu || this.choices.length) return
     this.clearAuto()
@@ -904,6 +916,9 @@ export default {
 
   toggleImmersive() {
     if (this.menu || this.endText) return
+    // 设置里可以关掉长按隐藏（防误触）。关掉后长按什么也不做。
+    const s = this.settings || {}
+    if (s.longpress === false) return
     this.lock()
     this.uiHidden = !this.uiHidden
     this.clearAuto()
