@@ -916,12 +916,24 @@ export default {
 
   toggleImmersive() {
     if (this.menu || this.endText) return
-    // 设置里可以关掉长按隐藏（防误触）。关掉后长按什么也不做。
-    const s = this.settings || {}
-    if (s.longpress === false) return
+    // 长按干什么由设置决定（三选一）：
+    //   'hide' 隐藏/显示界面（老行为）
+    //   'fast' 切换快进 —— 阅读时随手长按比翻菜单方便
+    //   'off'  什么也不做（防误触）
+    const mode = this.longpressMode()
+    if (mode === 'off') return
     this.lock()
+    if (mode === 'fast') { this.toggleFast(); return }
     this.uiHidden = !this.uiHidden
     this.clearAuto()
+  },
+
+  // 读设置里的长按行为，并兼容老存档（布尔 true/false）
+  longpressMode() {
+    const v = (this.settings || {}).longpress
+    if (v === true) return 'hide'
+    if (v === false) return 'off'
+    return (v === 'fast' || v === 'off') ? v : 'hide'
   },
 
   blockSwipe() {},

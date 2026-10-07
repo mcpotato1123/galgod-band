@@ -30,7 +30,7 @@
     </div>
 
     <!-- 长按隐藏界面（关掉之后长按不再隐藏，用来防误触） -->
-    <text class="slabel l5">长按隐藏界面</text>
+    <text class="slabel l5">长按屏幕</text>
     <div class="fastrow lprow">
       <text class="{{$item.cls}}" for="{{rowLp}}" tid="p" onclick="pickLp($idx)" onswipe="ban">{{$item.t}}</text>
     </div>
@@ -80,7 +80,8 @@
   .k1 { top: 60px; } .k2 { top: 124px; } .k3 { top: 188px; }
 
   .fastrow { position: absolute; top: 226px; left: 228px; flex-direction: row; }
-  .lprow { top: 260px; }
+  /* 3 个药丸（隐藏 / 快进 / 关闭）比 2 个宽，整行左移 */
+  .lprow { top: 260px; left: 180px; }
   .pill { width: 44px; height: 30px; border-radius: 15px; background-color: #2c2133;
           align-items: center; justify-content: center; margin-left: 6px;
           font-size: 15px; color: #cbbcc6; }
@@ -168,8 +169,11 @@ export default {
     this.rowKeep = ['关', '开'].map((t, i) => ({
       t: t, cls: (!!s.keepOn === !!i) ? 'pill-on' : 'pill'
     }))
-    this.rowLp = ['关', '开'].map((t, i) => ({
-      t: t, cls: (!!s.longpress === !!i) ? 'pill-on' : 'pill'
+    // 长按行为是三选一：隐藏 / 快进 / 关闭
+    const lpModes = ['hide', 'fast', 'off']
+    const lpCur = s.longpress === 'fast' ? 'fast' : (s.longpress === 'off' ? 'off' : 'hide')
+    this.rowLp = ['隐藏', '快进', '关闭'].map((t, i) => ({
+      t: t, cls: (lpModes[i] === lpCur) ? 'pill-on' : 'pill'
     }))
 
     this.hint1 = '字号 ' + SIZE_MIN + '~' + SIZE_MAX + ' px，显示的数字就是 px'
@@ -273,7 +277,8 @@ export default {
 
   pickLp(i) {
     this.lock()
-    this.apply({ longpress: i === 1 })
+    // 0 隐藏界面 / 1 快进 / 2 关闭
+    this.apply({ longpress: ['hide', 'fast', 'off'][i] || 'hide' })
     this.flush()
   },
 
