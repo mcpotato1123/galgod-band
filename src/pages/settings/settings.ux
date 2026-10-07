@@ -177,7 +177,7 @@ export default {
     }))
 
     this.hint1 = '字号 ' + SIZE_MIN + '~' + SIZE_MAX + ' px，显示的数字就是 px'
-    this.hint2 = '播放速度＝每字毫秒（0 为瞬间）；自动播放速度＝每句停留毫秒（0 为关闭）'
+    this.hint2 = '播放速度＝每字毫秒；自动播放＝每句停留毫秒。长按选「快进」时是按住才快进'
     this.pvStyle = 'font-size: ' + s.size + 'px; line-height: ' + (s.size + 6) + 'px;'
     this.pvNameStyle = 'font-size: ' + Math.max(16, s.size - 2) + 'px;'
   },

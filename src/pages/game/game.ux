@@ -1,5 +1,7 @@
 <template>
-  <div class="page" onclick="onTap" onlongpress="toggleImmersive" onswipe="blockSwipe">
+  <div class="page" onclick="onTap" onlongpress="toggleImmersive"
+       ontouchstart="onHoldStart" ontouchend="onHoldEnd" ontouchcancel="onHoldEnd"
+       onswipe="blockSwipe">
 
     <!-- 背景层：一张宽图 + 定时器小步推进 left 做平移。
          不用 CSS transition、不用 swiper —— 那两个在真机上都不行，
@@ -232,6 +234,9 @@ const BG_PAN_RANGE = BG_W - 336   // 可平移距离
 const BG_STEP_PX = 4       // 每帧推进多少像素
 const BG_TICK_MS = 100     // 每帧间隔（10fps）
 const AUTO_DEFAULT = 90    // 从菜单打开自动播放时给的默认停留（毫秒/字）
+// 按住多久才算「长按快进」。和系统长按识别的阈值接近，
+// 但这里是**自己计时**的 —— 因为要能感知「松手」。
+const HOLD_MS = 450
 
 export default {
   // ⚠️ Vela 运行时硬性规定：data 与 public/protected/private 不能同时存在，
@@ -262,7 +267,8 @@ export default {
     uiHidden: false,
     endText: '',
     autoOn: false,
-    fastOn: false
+    fastOn: false,
+    holdFast: false,
   },
 
   // ---------------------------------------------------------------- 生命周期
@@ -283,6 +289,8 @@ export default {
     this.typingToken = 0
     this.typingAt = 0
     this.timer = null
+    this.holdTimer = null
+    this.holdFast = false
     this.autoTimer = null
     this.saveTimer = null
     this.bgTimer = null
@@ -922,10 +930,47 @@ export default {
     //   'off'  什么也不做（防误触）
     const mode = this.longpressMode()
     if (mode === 'off') return
+    // 'fast' 模式由 onHoldStart / onHoldEnd 处理（按住才快进、松手就停），
+    // 这里不能也切一次，否则长按会同时开快进又被这里顶掉。
+    if (mode === 'fast') return
     this.lock()
-    if (mode === 'fast') { this.toggleFast(); return }
     this.uiHidden = !this.uiHidden
     this.clearAuto()
+  },
+
+  // ---- 长按快进：**按住才快进，松手就停**
+  // Vela 的 onlongpress 只在识别时触发一次、没有松手事件，
+  // 所以按下时自己计时，松手/取消时收尾。
+  onHoldStart() {
+    if (this.menu || this.endText || this.choices.length) return
+    if (this.longpressMode() !== 'fast') return
+    if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = null }
+    this.holdTimer = setTimeout(() => {
+      this.holdTimer = null
+      this.holdFast = true
+      this.lock()
+      this.setFast(true)
+    }, HOLD_MS)
+  },
+
+  onHoldEnd() {
+    // 还没到长按时长就松手了：什么都不做（这一次就是个普通点击）
+    if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = null }
+    if (!this.holdFast) return
+    this.holdFast = false
+    this.setFast(false)
+  },
+
+  // 只改内存里的状态，**不写盘** —— fast 是临时状态（见 reader.js 的 saveSettings）
+  setFast(on) {
+    const s = Object.assign({}, this.settings)
+    s.fast = !!on
+    if (on) s.autoMs = 0          // 快进与自动播放互斥
+    this.settings = s
+    this.fastOn = !!s.fast
+    this.autoOn = s.autoMs > 0
+    if (on) this.scheduleAuto()
+    else this.clearAuto()
   },
 
   // 读设置里的长按行为，并兼容老存档（布尔 true/false）
