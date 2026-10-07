@@ -237,6 +237,9 @@ const AUTO_DEFAULT = 90    // 从菜单打开自动播放时给的默认停留�
 // 按住多久才算「长按快进」。和系统长按识别的阈值接近，
 // 但这里是**自己计时**的 —— 因为要能感知「松手」。
 const HOLD_MS = 450
+// 兜底：按住超过这么久就强制停快进。
+// 正常松手由 touchend 收尾；这个只是防止 touchend 没来导致快进卡住。
+const HOLD_MAX_MS = 20000
 
 export default {
   // ⚠️ Vela 运行时硬性规定：data 与 public/protected/private 不能同时存在，
@@ -290,6 +293,7 @@ export default {
     this.typingAt = 0
     this.timer = null
     this.holdTimer = null
+    this.holdMax = null
     this.holdFast = false
     this.autoTimer = null
     this.saveTimer = null
@@ -357,7 +361,13 @@ export default {
     this.flushAutoSave()
     this.flushSeen()
   },
+  // 退到后台/关页面时一定收尾 —— 否则下次进来还是快进（就是上一版修的那个 bug 的翻版）
+  onHide() {
+    this.onHoldEnd()
+  },
+
   onDestroy() {
+    this.onHoldEnd()
     this.clearTimers()
     this.setKeepScreenOn(false)
     this.flushAutoSave()
@@ -901,6 +911,9 @@ export default {
   // ---------------------------------------------------------------- 交互
   // 物理点击：先过 400ms 防抖锁（避免一次触摸被识别成两下）
   onTap() {
+    // 兜底：如果松手时只来了 click、没来 touchend，在这里把快进收掉。
+    // 必须在下面那个 lockTap 早退**之前**做 —— 否则迟到的 click 收不了尾。
+    this.onHoldEnd()
     if (this.lockTap && Date.now() - this.lockTap < 400) return
     this.advance()
   },
@@ -950,12 +963,18 @@ export default {
       this.holdFast = true
       this.lock()
       this.setFast(true)
+      // 看门狗：touchcancel 也可能一起不来，兜一下
+      this.holdMax = setTimeout(() => {
+        this.holdMax = null
+        if (this.holdFast) this.onHoldEnd()
+      }, HOLD_MAX_MS)
     }, HOLD_MS)
   },
 
   onHoldEnd() {
     // 还没到长按时长就松手了：什么都不做（这一次就是个普通点击）
     if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = null }
+    if (this.holdMax) { clearTimeout(this.holdMax); this.holdMax = null }
     if (!this.holdFast) return
     this.holdFast = false
     this.setFast(false)
