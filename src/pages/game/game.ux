@@ -34,9 +34,13 @@
       <text class="hud-t">{{chapterTitle}}</text>
       <text class="hud-p">{{progress}}</text>
     </div>
-    <div class="menu-btn" if="{{!uiHidden && !endText}}" onclick="openMenu" onswipe="blockSwipe">
+    <!-- 打开菜单的按钮：已改为「**下滑**打开」，按钮暂时隐藏。
+         代码**没有删** —— openMenu() 和下面的 .menu-btn 样式都还在。
+         想恢复按钮，把下面这行的 if 改回 {{!uiHidden && !endText}} 即可。
+    <div class="menu-btn" if="{{false}}" onclick="openMenu" onswipe="blockSwipe">
       <text class="menu-ico">≡</text>
     </div>
+    -->
 
     <!-- 对白面板（出现选项时收起，避免空框）；看 CG 时压得更透，让画面露出来 -->
     <div class="panel" if="{{!uiHidden && !endText && !choices.length && !cgSrc}}" onswipe="blockSwipe"></div>
@@ -240,6 +244,15 @@ const HOLD_MS = 450
 // 兜底：按住超过这么久就强制停快进。
 // 正常松手由 touchend 收尾；这个只是防止 touchend 没来导致快进卡住。
 const HOLD_MAX_MS = 20000
+
+// 取手势方向。不同固件把方向放在不同位置，逐个试（cg 页同款写法）。
+function readDir(e) {
+  if (!e) return ''
+  if (typeof e.direction === 'string') return e.direction
+  if (e.detail && typeof e.detail.direction === 'string') return e.detail.direction
+  if (e.target && typeof e.target.direction === 'string') return e.target.direction
+  return ''
+}
 
 export default {
   // ⚠️ Vela 运行时硬性规定：data 与 public/protected/private 不能同时存在，
@@ -659,7 +672,14 @@ export default {
         const node = this.chunkNodes[this.pc - this.chunkStart]
         if (!node) { this.badge = '节点为空 ' + this.pc; return }
 
-        if (node.bg !== undefined) this.applyBg(node.bg)
+        // `bg` 对应 Ren'Py 的 `scene`（换景），而 scene **会清空所有立绘**。
+        // 数据也印证这个语义：换景时如果还想有人，那一步会同时带 cs。
+        // 只当换背景处理的话，「换景但没带 cs」的步会沿用上一位人物
+        // —— 就是「本该没人的界面却站着上一位」那个 bug（数据里有 61 处）。
+        if (node.bg !== undefined) {
+          this.applyBg(node.bg)
+          if (node.cs === undefined) { this.csRaw = []; this.renderSprites([]) }
+        }
         if (node.cs !== undefined) { this.csRaw = node.cs; this.renderSprites(node.cs) }
         if (node.cg !== undefined) {
           this.cgSrc = node.cg >= 0 ? (IMG[node.cg] || '') : ''
@@ -1000,7 +1020,14 @@ export default {
     return (v === 'fast' || v === 'off') ? v : 'hide'
   },
 
-  blockSwipe() {},
+  // 所有元素都挂了这个处理器。原来它什么都不做（只是吃掉手势、防止页面被滑走），
+  // 现在兼职「下滑打开菜单」—— 因为按钮隐藏了，而挂在根节点上的 onswipe
+  // 会被子元素吃掉（cg 页踩过这个），所以放在这里最稳。
+  blockSwipe(e) {
+    if (this.menu || this.endText) return
+    if (readDir(e) !== 'down') return
+    this.openMenu()
+  },
 
   openMenu() { this.lock(); this.menu = true; this.clearAuto() },
   closeMenu() { this.lock(); this.menu = false; this.scheduleAuto() },
