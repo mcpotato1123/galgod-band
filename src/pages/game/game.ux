@@ -245,6 +245,27 @@ const HOLD_MS = 450
 // 正常松手由 touchend 收尾；这个只是防止 touchend 没来导致快进卡住。
 const HOLD_MAX_MS = 20000
 
+// 取触摸点的 y。不同固件把坐标放在不同字段，逐个试
+// （readX 是 cg 页那套经真机验证的写法，这里照抄成 y）。
+// 注意要试 changedTouches —— touchend 时 touches 是空的。
+function readY(e) {
+  if (!e) return null
+  let p = null
+  if (e.touches && e.touches.length) p = e.touches[0]
+  else if (e.changedTouches && e.changedTouches.length) p = e.changedTouches[0]
+  else p = e
+  if (!p) return null
+  if (typeof p.clientY === 'number') return p.clientY
+  if (typeof p.pageY === 'number') return p.pageY
+  if (typeof p.y === 'number') return p.y
+  if (typeof p.offsetY === 'number') return p.offsetY
+  return null
+}
+
+// 下滑判定的阈值：位移够小就能触发（系统手势识别要求比这高得多，所以原来不灵敏）
+const SWIPE_MIN = 36    // 纵向至少滑这么多像素
+const SWIPE_MS = 800    // 且要在这么久之内
+
 // 取手势方向。不同固件把方向放在不同位置，逐个试（cg 页同款写法）。
 function readDir(e) {
   if (!e) return ''
@@ -285,6 +306,8 @@ export default {
     autoOn: false,
     fastOn: false,
     holdFast: false,
+    swipeY0: null,
+    swipeT0: 0,
   },
 
   // ---------------------------------------------------------------- 生命周期
@@ -308,6 +331,8 @@ export default {
     this.holdTimer = null
     this.holdMax = null
     this.holdFast = false
+    this.swipeY0 = null
+    this.swipeT0 = 0
     this.autoTimer = null
     this.saveTimer = null
     this.bgTimer = null
@@ -974,7 +999,10 @@ export default {
   // ---- 长按快进：**按住才快进，松手就停**
   // Vela 的 onlongpress 只在识别时触发一次、没有松手事件，
   // 所以按下时自己计时，松手/取消时收尾。
-  onHoldStart() {
+  onHoldStart(e) {
+    // 顺手记下滑动起点：下滑开菜单要自己算位移（见 onHoldEnd）
+    this.swipeY0 = readY(e)
+    this.swipeT0 = Date.now()
     if (this.menu || this.endText || this.choices.length) return
     if (this.longpressMode() !== 'fast') return
     if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = null }
@@ -991,10 +1019,11 @@ export default {
     }, HOLD_MS)
   },
 
-  onHoldEnd() {
-    // 还没到长按时长就松手了：什么都不做（这一次就是个普通点击）
+  onHoldEnd(e) {
+    // 还没到长按时长就松手了：先看是不是一次下滑
     if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = null }
     if (this.holdMax) { clearTimeout(this.holdMax); this.holdMax = null }
+    this.checkSwipeDown(e)
     if (!this.holdFast) return
     this.holdFast = false
     this.setFast(false)
@@ -1010,6 +1039,23 @@ export default {
     this.autoOn = s.autoMs > 0
     if (on) this.scheduleAuto()
     else this.clearAuto()
+  },
+
+  // 自己判下滑。比 onswipe 灵敏得多：只看位移和耗时，不看速度/加速度。
+  checkSwipeDown(e) {
+    const y0 = this.swipeY0
+    const t0 = this.swipeT0
+    this.swipeY0 = null
+    this.swipeT0 = 0
+    if (y0 === null || y0 === undefined || !t0) return
+    if (Date.now() - t0 > SWIPE_MS) return
+    const y1 = readY(e)
+    if (y1 === null || y1 === undefined) return
+    if (y1 - y0 < SWIPE_MIN) return        // 只认向下（y 变大）
+    if (this.menu || this.endText) return
+    // 吞掉紧随其后的 click —— 否则这一次滑动会顺带翻一页
+    this.lockTap = Date.now()
+    this.openMenu()
   },
 
   // 读设置里的长按行为，并兼容老存档（布尔 true/false）
