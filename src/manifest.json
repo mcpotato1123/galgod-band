@@ -3,7 +3,7 @@
   "name": "GalGod",
   "icon": "/common/icon.png",
   "versionName": "2.5.1",
-  "versionCode": 32,
+  "versionCode": 49,
   "minPlatformVersion": 1100,
   "deviceTypeList": [
     "watch"

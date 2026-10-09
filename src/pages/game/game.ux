@@ -80,7 +80,10 @@
       <div class="mbtn" onclick="goLoad" onswipe="blockSwipe"><text class="mbtn-t">读取存档</text></div>
       <div class="mbtn" onclick="toggleAuto" onswipe="blockSwipe"><text class="mbtn-t">自动播放：{{autoOn ? '开' : '关'}}</text></div>
       <div class="mbtn" onclick="toggleFast" onswipe="blockSwipe"><text class="mbtn-t">快进：{{fastOn ? '开' : '关'}}</text></div>
-      <div class="mbtn" onclick="nextChapter" onswipe="blockSwipe"><text class="mbtn-t">跳到下一章</text></div>
+      <div class="mrow">
+        <div class="mbtn mbtn-half" onclick="nextChapter" onswipe="blockSwipe"><text class="mbtn-t">下一章</text></div>
+        <div class="mbtn mbtn-half" onclick="rewind" onswipe="blockSwipe"><text class="mbtn-t">快退</text></div>
+      </div>
       <div class="mrow">
         <div class="mbtn mbtn-half" onclick="goChapters" onswipe="blockSwipe"><text class="mbtn-t">章节</text></div>
         <div class="mbtn mbtn-half" onclick="goCg" onswipe="blockSwipe"><text class="mbtn-t">CG</text></div>
@@ -262,7 +265,22 @@ function readY(e) {
   return null
 }
 
-// 下滑判定的阈值：位移够小就能触发（系统手势识别要求比这高得多，所以原来不灵敏）
+// 取触摸点的 x。和 readY 同款兜底（readX 是 cg 页那套经真机验证的写法）。
+function readX(e) {
+  if (!e) return null
+  let p = null
+  if (e.touches && e.touches.length) p = e.touches[0]
+  else if (e.changedTouches && e.changedTouches.length) p = e.changedTouches[0]
+  else p = e
+  if (!p) return null
+  if (typeof p.clientX === 'number') return p.clientX
+  if (typeof p.pageX === 'number') return p.pageX
+  if (typeof p.x === 'number') return p.x
+  if (typeof p.offsetX === 'number') return p.offsetX
+  return null
+}
+
+// 滑动判定的阈值：位移够小就能触发（系统手势识别要求比这高得多，所以原来不灵敏）
 const SWIPE_MIN = 36    // 纵向至少滑这么多像素
 const SWIPE_MS = 800    // 且要在这么久之内
 
@@ -301,12 +319,17 @@ export default {
     canTap: false,
     choices: [],
     menu: false,
+    // 快退用的快照栈。**不持久化** —— 只是这一会儿读过的历史。
+    // 不进存档：写进去会让存档明显变大，而回溯只在"一口气读"时有用。
+    hist: [],
+    rewindRepeat: null,
     uiHidden: false,
     endText: '',
     autoOn: false,
     fastOn: false,
     holdFast: false,
     swipeY0: null,
+    swipeX0: null,
     swipeT0: 0,
   },
 
@@ -332,7 +355,9 @@ export default {
     this.holdMax = null
     this.holdFast = false
     this.swipeY0 = null
+    this.swipeX0 = null
     this.swipeT0 = 0
+    this.rewindRepeat = null
     this.autoTimer = null
     this.saveTimer = null
     this.bgTimer = null
@@ -402,10 +427,12 @@ export default {
   // 退到后台/关页面时一定收尾 —— 否则下次进来还是快进（就是上一版修的那个 bug 的翻版）
   onHide() {
     this.onHoldEnd()
+    this.stopRewindRepeat()      // 退到后台就别再退了
   },
 
   onDestroy() {
     this.onHoldEnd()
+    this.stopRewindRepeat()
     this.clearTimers()
     this.setKeepScreenOn(false)
     this.flushAutoSave()
@@ -838,6 +865,16 @@ export default {
     this.endText = ''
     this.speaker = node.n || ''
     this.rawText = node.x || ''
+    // 快退用：每显示一句就记一份快照。整段包 try/catch ——
+    // 记录失败最多是退不回去，绝不能让剧情推进停住（黑屏过一次）。
+    try {
+      if (!this.hist) this.hist = []
+      const top = this.hist[this.hist.length - 1]
+      if (!top || top.pc !== this.pc) {
+        this.hist.push(this.collectSave())
+        if (this.hist.length > 60) this.hist.shift()
+      }
+    } catch (e) { /* 记不上就算了，不影响阅读 */ }
     this.pages = this.paginate(this.rawText)
     this.pageIdx = 0
     this.playPage()
@@ -959,7 +996,18 @@ export default {
     // 兜底：如果松手时只来了 click、没来 touchend，在这里把快进收掉。
     // 必须在下面那个 lockTap 早退**之前**做 —— 否则迟到的 click 收不了尾。
     this.onHoldEnd()
+    // ⚠️ 这道锁必须在「停止快退」**之前**：
+    // 菜单里按「快退」时，那次点击会冒泡到根节点触发本函数，
+    // 而 rewind() 已经调过 lock()（设了 lockTap）—— 先让它吞掉这次冒泡的点击，
+    // 否则快退刚起就被自己停掉（真机上就是这个现象：一点就提示「已停止快退」）。
     if (this.lockTap && Date.now() - this.lockTap < 400) return
+    // 真正点在屏幕上（不是按钮冒泡上来的）：停连续快退，并且不翻页
+    if (this.rewindRepeat) {
+      this.stopRewindRepeat()
+      this.lockTap = Date.now()
+      prompt.showToast({ message: '已停止快退' })
+      return
+    }
     this.advance()
   },
 
@@ -1000,8 +1048,9 @@ export default {
   // Vela 的 onlongpress 只在识别时触发一次、没有松手事件，
   // 所以按下时自己计时，松手/取消时收尾。
   onHoldStart(e) {
-    // 顺手记下滑动起点：下滑开菜单要自己算位移（见 onHoldEnd）
+    // 顺手记下滑动起点：下滑开菜单、右滑快退都要自己算位移（见 onHoldEnd）
     this.swipeY0 = readY(e)
+    this.swipeX0 = readX(e)
     this.swipeT0 = Date.now()
     if (this.menu || this.endText || this.choices.length) return
     if (this.longpressMode() !== 'fast') return
@@ -1041,21 +1090,38 @@ export default {
     else this.clearAuto()
   },
 
-  // 自己判下滑。比 onswipe 灵敏得多：只看位移和耗时，不看速度/加速度。
+  // 自己判滑动。比 onswipe 灵敏得多：只看位移和耗时，不看速度/加速度。
+  //   向下滑 -> 开菜单
+  //   向右滑 -> 快退（返回上一句）
   checkSwipeDown(e) {
     const y0 = this.swipeY0
+    const x0 = this.swipeX0
     const t0 = this.swipeT0
     this.swipeY0 = null
+    this.swipeX0 = null
     this.swipeT0 = 0
-    if (y0 === null || y0 === undefined || !t0) return
+    if (!t0) return
     if (Date.now() - t0 > SWIPE_MS) return
-    const y1 = readY(e)
-    if (y1 === null || y1 === undefined) return
-    if (y1 - y0 < SWIPE_MIN) return        // 只认向下（y 变大）
     if (this.menu || this.endText) return
-    // 吞掉紧随其后的 click —— 否则这一次滑动会顺带翻一页
-    this.lockTap = Date.now()
-    this.openMenu()
+
+    const y1 = readY(e)
+    const x1 = readX(e)
+    const dy = (y1 === null || y1 === undefined || y0 === null || y0 === undefined)
+      ? 0 : (y1 - y0)
+    const dx = (x1 === null || x1 === undefined || x0 === null || x0 === undefined)
+      ? 0 : (x1 - x0)
+
+    // 竖向优先：斜着滑的时候按下滑处理（下滑是打开菜单，更常用）
+    if (dy >= SWIPE_MIN && dy >= Math.abs(dx)) {
+      this.lockTap = Date.now()      // 吞掉紧随其后的 click，免得顺带翻一页
+      this.openMenu()
+      return
+    }
+    // 向右（x 变大）才算快退
+    if (dx >= SWIPE_MIN && dx > Math.abs(dy)) {
+      this.lockTap = Date.now()
+      this.rewindOnce()          // 右滑只退一句（连续退是菜单里那个按钮）
+    }
   },
 
   // 读设置里的长按行为，并兼容老存档（布尔 true/false）
@@ -1073,6 +1139,55 @@ export default {
     if (this.menu || this.endText) return
     if (readDir(e) !== 'down') return
     this.openMenu()
+  },
+
+  // ---- 快退：往回退一句 ----
+  // 复用存档那套快照（collectSave / applySave），所以角色、背景、CG、分支标志
+  // 都会一起回去 —— 退到选择支之前还能重新选，状态是自洽的。
+  // ---- 快退 ----
+  // 菜单里按一下：关掉菜单回到正文，然后**一直退**。
+  // 想停就在正文页点一下屏幕（见 onTap）。
+  rewind() {
+    this.lock()
+    this.menu = false
+    this.clearAuto()
+    this.stopRewindRepeat()
+    if (!this.rewindStep()) {
+      prompt.showToast({ message: '已经是最早的一句了' })
+      return
+    }
+    this.rewindRepeat = setInterval(() => {
+      if (!this.rewindStep()) {
+        this.stopRewindRepeat()
+        prompt.showToast({ message: '已经退到最早的一句了' })
+      }
+    }, 180)
+  },
+
+  // 退一句。返回 false 表示退不动了。不弹提示、不关菜单（连续退靠它）。
+  rewindStep() {
+    const h = this.hist || []
+    if (h.length < 2) return false
+    h.pop()                    // 丢掉当前这句
+    const prev = h.pop()       // 目标是上一句
+    h.push(prev)               // 它成为新的栈顶
+    this.applySave(prev)
+    return true
+  },
+
+  // 正文页右滑用：**只退一句**，不启动连续退。
+  // 如果正在连续退，先停下、交回手动控制。
+  rewindOnce() {
+    this.lock()
+    if (this.rewindRepeat) this.stopRewindRepeat()
+    if (!this.rewindStep()) prompt.showToast({ message: '已经是最早的一句了' })
+  },
+
+  stopRewindRepeat() {
+    if (this.rewindRepeat) {
+      clearInterval(this.rewindRepeat)
+      this.rewindRepeat = null
+    }
   },
 
   openMenu() { this.lock(); this.menu = true; this.clearAuto() },

@@ -22,8 +22,10 @@ export const DEFAULT_SETTINGS = {
   autoMs: 0,      // 自动播放 每字停留毫秒（0 = 关）
   fast: false,    // 快速播放（瞬间出字 + 连播，遇到选项/结局自动停）
   keepOn: true,   // 阅读时屏幕常亮（走 @system.brightness）
-  // 长按画面的行为：'hide' 隐藏界面 / 'fast' 切换快进 / 'off' 什么都不做
-  longpress: 'hide'
+  // 长按画面的行为：'hide' 隐藏界面 / 'fast' 按住快进 / 'off' 什么都不做
+  // 默认 'off'：长按隐藏界面容易误触（阅读时手指搭在屏幕上就会触发），
+  // 想要的玩家可以在设置里自己开。
+  longpress: 'off'
 }
 
 export const MAX_SLOTS = 6

@@ -21,7 +21,16 @@
       <text class="egg-t">？？？</text>
       <div class="egg-b" onclick="unlockAfter" onswipe="ban"><text class="egg-bt">解锁 · 后日谈</text></div>
       <div class="egg-b" onclick="unlockCg" onswipe="ban"><text class="egg-bt">解锁 · 全部 CG</text></div>
+      <div class="egg-b" onclick="openFish" onswipe="ban"><text class="egg-bt">小鱼干</text></div>
       <div class="egg-b egg-c" onclick="closeEgg" onswipe="ban"><text class="egg-bt">关闭</text></div>
+    </div>
+
+    <!-- 彩蛋小剧场：纯文字，点一下走一句。不在主线里出现，也不进剧本数据。 -->
+    <div class="mask" if="{{fishOpen}}"></div>
+    <div class="fish" if="{{fishOpen}}" onclick="tapFish" onswipe="ban">
+      <text class="fish-n" if="{{fishName}}">{{fishName}}</text>
+      <text class="fish-t">{{fishText}}</text>
+      <text class="fish-h">{{fishHint}}</text>
     </div>
   </div>
 </template>
@@ -53,7 +62,7 @@
   /* 彩蛋菜单 */
   .mask { position: absolute; top: 0px; left: 0px; width: 336px; height: 480px;
           background-color: rgba(8, 6, 10, 0.72); }
-  .egg { position: absolute; top: 132px; left: 32px; width: 272px; height: 212px;
+  .egg { position: absolute; top: 104px; left: 32px; width: 272px; height: 250px;
          background-color: #241c2c; border-radius: 18px; flex-direction: column;
          align-items: center; padding-top: 14px; }
   .egg-t { font-size: 17px; color: #7ee8e0; margin-bottom: 12px; }
@@ -61,6 +70,13 @@
            align-items: center; justify-content: center; margin-bottom: 8px; }
   .egg-c { background-color: #2a2033; margin-top: 4px; }
   .egg-bt { font-size: 17px; color: #ffffff; }
+
+  /* 彩蛋小剧场：占满下面的空间，纯文字。 */
+  .fish { position: absolute; top: 300px; left: 24px; width: 288px; height: 150px;
+          flex-direction: column; justify-content: flex-start; }
+  .fish-n { font-size: 17px; color: #7ee8e0; margin-bottom: 8px; }
+  .fish-t { font-size: 17px; color: #ffffff; line-height: 24px; }
+  .fish-h { position: absolute; bottom: 0px; left: 0px; font-size: 14px; color: #8a7f90; }
 </style>
 
 <script>
@@ -119,13 +135,57 @@ const ABOUT = [
   ['p', 'Copyright (c) 2026 The GalGod Band Project Contributors'],
 ]
 
+// ---- 彩蛋「给 Yui 加小鱼干」的台词 ----
+// 纯文字，不需要任何图片素材；也不进剧本数据、不在主线里出现。
+//
+// Yui 是猫娘。她的要求很具体：**蛋黄粉要裹得厚厚的**，而且**要带星星闪的那种**。
+// 想改内容直接改这里：n 是说话人（空串表示旁白），t 是台词。
+const FISH_LINES = [
+  { n: '',    t: '（口袋里还剩最后一包小鱼干。）' },
+  { n: 'Yui', t: '……（耳朵动了动）' },
+  { n: '我',  t: '你盯着我干什么？' },
+  { n: 'Yui', t: '你口袋里有味道。' },
+  { n: '我',  t: '你鼻子是雷达吗。' },
+  { n: 'Yui', t: '是。' },
+  { n: '我',  t: '……行吧。' },
+  { n: '',    t: '（把整包倒了出来。）' },
+  { n: 'Yui', t: '！' },
+  { n: 'Yui', t: '……等一下。' },
+  { n: 'Yui', t: '这个不行。' },
+  { n: '我',  t: '啊？' },
+  { n: 'Yui', t: '蛋黄粉太薄了。' },
+  { n: '我',  t: '你还挑这个。' },
+  { n: 'Yui', t: '要裹得厚厚的。厚到咬下去，先掉一层粉。' },
+  { n: '我',  t: '……' },
+  { n: 'Yui', t: '而且要有星星。' },
+  { n: '我',  t: '什么星星。' },
+  { n: 'Yui', t: '会闪的那种。' },
+  { n: '我',  t: '小鱼干上为什么会有星星。' },
+  { n: 'Yui', t: '因为那是小鱼干的愿望。' },
+  { n: '我',  t: '……' },
+  { n: '我',  t: '（默默记下：厚蛋黄粉，带星星闪。）' },
+  { n: 'Yui', t: '记下了？' },
+  { n: '我',  t: '记下了。' },
+  { n: 'Yui', t: '那就好。' },
+  { n: 'Yui', t: '今天的评价，给你加一分。' },
+  { n: '我',  t: '原来是可以加分的吗。' },
+  { n: 'Yui', t: '看你表现。' },
+  { n: '',    t: '（尾巴晃了两下。）' },
+]
+
 export default {
   // 统一用 protected，不要用 data（两者不能共存，运行时会抛错）
   protected: {
     rows: [],
     ver: APP_VER,
     dots: '',
-    eggOpen: false
+    eggOpen: false,
+    // 彩蛋小剧场
+    fishOpen: false,
+    fishIdx: 0,
+    fishName: '',
+    fishText: '',
+    fishHint: '',
   },
 
   onInit() {
@@ -169,6 +229,35 @@ export default {
   },
 
   closeEgg() { this.lock(); this.eggOpen = false },
+
+  // ---- 彩蛋：给 Yui 加小鱼干（纯文字小剧场，不在主线里）
+  openFish() {
+    this.lock()
+    this.eggOpen = false
+    this.fishIdx = 0
+    this.fishOpen = true
+    this.showFishLine()
+  },
+
+  showFishLine() {
+    const l = FISH_LINES[this.fishIdx] || null
+    if (!l) { this.fishOpen = false; return }
+    this.fishName = l.n || ''
+    this.fishText = l.t || ''
+    this.fishHint = (this.fishIdx + 1) + ' / ' + FISH_LINES.length
+  },
+
+  tapFish() {
+    this.lock()
+    this.fishIdx++
+    if (this.fishIdx >= FISH_LINES.length) {
+      // 走完就回到彩蛋面板，方便再看别的
+      this.fishOpen = false
+      this.eggOpen = true
+      return
+    }
+    this.showFishLine()
+  },
 
   // 解锁后日谈：写 cleared 标记，章节选择里就会出现「后日谈 · 诺提拉」
   unlockAfter() {
