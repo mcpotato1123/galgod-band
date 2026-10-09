@@ -15,7 +15,7 @@
 CG 鉴赏   9 组 / 32 张差分图，按原作 gallery.rpy 的分组与解锁条件；大图可横向拖动看全图
 页面      7 个：主页 / 正文 / 存档 / 章节 / CG 鉴赏 / 设置 / 关于
 协议      代码 MIT（见 LICENSE）；剧本与美术资源不在 MIT 范围内（见 NOTICE.md）
-产物      dist/com.galgod.band.debug.2.5.1.rpk   7.40 MB
+产物      dist/com.galgod.band.debug.2.5.2.rpk   7.40 MB
 ```
 
 > **免责声明**：本项目是非官方的个人移植，仅供学习交流。
@@ -122,8 +122,8 @@ GalGod手环版/
 
 ```bash
 npm install                    # 只有 aiot-toolkit 一个真正的依赖
-npm run build                  # → dist/com.galgod.band.debug.2.5.1.rpk
-npm run release                # → dist/com.galgod.band.release.2.5.1.rpk（需要 sign/ 下的证书）
+npm run build                  # → dist/com.galgod.band.debug.2.5.2.rpk
+npm run release                # → dist/com.galgod.band.release.2.5.2.rpk（需要 sign/ 下的证书）
 npm run test                   # 排版 + 几何常量 + 全景参数一致性
 npm run start                  # 起模拟器预览（需要 AIoT-IDE/模拟器环境）
 ```
